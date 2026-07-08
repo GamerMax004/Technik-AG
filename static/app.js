@@ -4,7 +4,6 @@
 
   const addPersonUrl = panel.dataset.addPersonUrl;
   const addDateUrl = panel.dataset.addDateUrl;
-  const joinUrl = panel.dataset.joinUrl;
   const entryUrl = panel.dataset.entryUrl;
 
   const STATES = ['unset', 'ok', 'warn', 'no'];
@@ -122,12 +121,15 @@
   }
   addDateBtn.addEventListener('click', submitDate);
 
-  // "Mich hinzufügen"
-  const joinBtn = document.getElementById('joinBtn');
-  if(joinBtn){
-    joinBtn.addEventListener('click', async () => {
+  // Registrierten Nutzer per Dropdown hinzufügen
+  const userSelect = document.getElementById('userSelect');
+  const addUserBtn = document.getElementById('addUserBtn');
+  if(addUserBtn){
+    addUserBtn.addEventListener('click', async () => {
+      const userId = userSelect.value;
+      if(!userId) return;
       try{
-        await api(joinUrl, { method: 'POST', body: JSON.stringify({}) });
+        await api(addPersonUrl, { method: 'POST', body: JSON.stringify({ user_id: Number(userId) }) });
         location.reload();
       } catch(err){ alert(err.message); }
     });

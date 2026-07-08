@@ -95,7 +95,10 @@ header.top p{ margin:0; color: var(--ink-soft); font-size:14.5px; max-width:520p
 .toolbar .field{ display:flex; align-items:center; gap:8px; background:var(--surface-2); border:1px solid var(--line); border-radius:var(--radius-sm); padding:4px 6px 4px 12px; }
 .toolbar input{ border:none; background:transparent; font:inherit; font-size:14px; color:var(--ink); padding:7px 4px; min-width:160px; }
 .toolbar input:focus{ outline:none; }
+.toolbar select{ border:none; background:transparent; font:inherit; font-size:14px; color:var(--ink); padding:7px 4px; max-width:220px; }
+.toolbar select:focus{ outline:none; }
 .toolbar .field .btn{ padding:7px 12px; }
+.toolbar .field .btn:disabled{ opacity:.4; cursor:not-allowed; }
 .legend{ display:flex; align-items:center; gap:18px; padding:0 16px 16px; flex-wrap:wrap; color:var(--ink-soft); font-size:13px; }
 .legend .item{ display:flex; align-items:center; gap:7px; }
 .legend .dot{ width:11px; height:11px; border-radius:3px; flex-shrink:0; }
@@ -163,6 +166,8 @@ td.cell-td{ text-align:center; background:var(--surface); }
 .admin-inline-form.small{ margin:0; }
 .admin-inline-form input, .admin-inline-form select{ font:inherit; font-size:13.5px; padding:8px 10px; border:1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--ink); }
 .admin-table{ width:100%; border-collapse:collapse; }
+.admin-scroll{ border-top:none; overflow-x:auto; }
+.admin-scroll .admin-table{ min-width:520px; }
 .admin-table th{ text-align:left; font-size:11.5px; text-transform:uppercase; letter-spacing:.06em; color: var(--ink-soft); padding:8px 10px; border-bottom:1px solid var(--line); }
 .admin-table td{ padding:8px 10px; border-bottom:1px solid var(--line); font-size:13.5px; vertical-align:middle; }
 .admin-table .muted{ color: var(--ink-soft); }
@@ -171,8 +176,6 @@ td.cell-td{ text-align:center; background:var(--surface); }
 @media (prefers-reduced-motion: reduce){ *{ transition:none !important; } }
 
 /* Rollen / Rechte */
-.join-field{ gap:10px; padding:8px 14px; }
-.join-hint{ font-size:13px; color: var(--ink-soft); }
 .me-badge{ font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color: var(--accent); background: var(--accent-soft); padding:2px 6px; border-radius:5px; flex-shrink:0; }
 tr.my-row .row-head{ box-shadow: inset 3px 0 0 var(--accent); }
 .cell-readonly{ width:100%; height:52px; display:flex; align-items:center; justify-content:center; cursor:default; }
@@ -191,6 +194,29 @@ tr.my-row .row-head{ box-shadow: inset 3px 0 0 var(--accent); }
   header.top h1{ font-size:23px; }
   .toolbar{ flex-direction:column; align-items:stretch; }
   .toolbar .field{ width:100%; }
+  .toolbar input, .toolbar select{ min-width:0; max-width:none; flex:1; width:100%; }
   .actions-top{ width:100%; }
   .actions-top .btn{ flex:1; justify-content:center; }
+
+  .topnav-inner{ flex-wrap:wrap; gap:8px; padding:12px 16px; }
+  .topnav-right{ gap:10px; }
+  .navuser{ display:none; }
+
+  .admin-inline-form{ flex-direction:column; align-items:stretch; }
+  .admin-inline-form input, .admin-inline-form select{ width:100%; }
+  .admin-inline-form.small{ min-width:180px; }
+
+  .invite-link-row{ flex-wrap:wrap; }
+  .invite-link-field{ width:100%; }
+
+  .row-head .name-input{ width:88px; }
+  .col-head{ min-width:88px; padding:10px 8px !important; }
+  .corner{ min-width:120px; }
+}
+
+@media (max-width:400px){
+  .wrap{ padding:20px 14px 60px; }
+  .auth-card{ padding:22px; }
+  header.top h1{ font-size:20px; }
+  .brand{ font-size:13.5px; }
 }
