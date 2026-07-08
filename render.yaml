@@ -1,0 +1,22 @@
+databases:
+  - name: verfuegbarkeitsplaner-db
+    plan: free
+    databaseName: planer
+    user: planer
+
+services:
+  - type: web
+    name: verfuegbarkeitsplaner
+    runtime: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn app:app"
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: FLASK_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: verfuegbarkeitsplaner-db
+          property: connectionString

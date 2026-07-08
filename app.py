@@ -1,0 +1,605 @@
+import os
+import secrets
+from datetime import datetime, timedelta, date as date_cls
+from io import BytesIO
+
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, abort, send_file
+from flask_login import (
+    LoginManager, login_user, logout_user, login_required, current_user
+)
+from flask_wtf import CSRFProtect
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from sqlalchemy import func
+
+from models import db, User, Board, Person, EventDate, Entry, ChangeLog, Invite, STATUS_VALUES, ROLE_LABELS
+
+# ---------------------------------------------------------------------------
+# App / DB setup
+# ---------------------------------------------------------------------------
+
+app = Flask(__name__)
+app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret-change-me")
+
+database_url = os.environ.get("DATABASE_URL", "sqlite:///local.db")
+# Render liefert postgres:// - SQLAlchemy 2.x will postgresql://
+if database_url.startswith("postgres://"):
+    database_url = database_url.replace("postgres://", "postgresql://", 1)
+app.config["SQLALCHEMY_DATABASE_URI"] = database_url
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_pre_ping": True}
+
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = os.environ.get("FLASK_ENV") == "production"
+
+db.init_app(app)
+csrf = CSRFProtect(app)
+limiter = Limiter(get_remote_address, app=app, default_limits=[], storage_uri="memory://")
+
+login_manager = LoginManager(app)
+login_manager.login_view = "login"
+login_manager.login_message = "Bitte melde dich an, um fortzufahren."
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    return db.session.get(User, int(user_id))
+
+
+def admin_required(fn):
+    """Nur echte Administratoren (Nutzer-/Boardverwaltung)."""
+    from functools import wraps
+
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not current_user.is_authenticated or not current_user.is_admin:
+            abort(403)
+        return fn(*args, **kwargs)
+
+    return wrapper
+
+
+def staff_required(fn):
+    """Admin oder Lehrer: Board-Inhalte verwalten, PDF exportieren."""
+    from functools import wraps
+
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not current_user.is_authenticated or not current_user.is_staff:
+            abort(403)
+        return fn(*args, **kwargs)
+
+    return wrapper
+
+
+def can_edit_person(person):
+    """Staff darf jede Zeile bearbeiten, normale Nutzer nur ihre eigene."""
+    return current_user.is_staff or person.user_id == current_user.id
+
+
+def log_action(board_id, action, detail=None):
+    entry = ChangeLog(
+        board_id=board_id,
+        user_id=current_user.id if current_user.is_authenticated else None,
+        action=action,
+        detail=detail,
+    )
+    db.session.add(entry)
+
+
+STATUS_LABEL = {"unset": "Offen", "ok": "Verfügbar", "warn": "Mit Vorbehalt", "no": "Nicht verfügbar"}
+
+# ---------------------------------------------------------------------------
+# Auth
+# ---------------------------------------------------------------------------
+
+@app.route("/register", methods=["GET", "POST"])
+@limiter.limit("10 per minute", methods=["POST"])
+def register():
+    if current_user.is_authenticated:
+        return redirect(url_for("dashboard"))
+
+    invite_code = request.values.get("invite", "").strip()
+    invite = Invite.query.filter_by(code=invite_code).first() if invite_code else None
+    invite_ok = invite is not None and invite.is_valid()
+
+    # Ausnahme: Solange noch kein einziger Nutzer existiert, darf sich der
+    # allererste Account (Administrator) auch ohne Einladung registrieren.
+    is_bootstrap = User.query.count() == 0
+    if not invite_ok and not is_bootstrap:
+        return render_template("register.html", invite_missing=True)
+
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        display_name = request.form.get("display_name", "").strip() or username
+        password = request.form.get("password", "")
+        password2 = request.form.get("password2", "")
+
+        error = None
+        if len(username) < 3:
+            error = "Benutzername muss mindestens 3 Zeichen haben."
+        elif len(password) < 6:
+            error = "Passwort muss mindestens 6 Zeichen haben."
+        elif password != password2:
+            error = "Passwörter stimmen nicht überein."
+        elif User.query.filter(func.lower(User.username) == username.lower()).first():
+            error = "Dieser Benutzername ist bereits vergeben."
+
+        if error:
+            flash(error, "error")
+            return render_template("register.html", username=username, display_name=display_name, invite=invite_code)
+
+        is_first_user = User.query.count() == 0
+        user = User(
+            username=username,
+            display_name=display_name,
+            role="admin" if is_first_user else "user",
+        )
+        user.set_password(password)
+        db.session.add(user)
+
+        if invite_ok:
+            invite.uses_count += 1
+            if invite.max_uses and invite.uses_count >= invite.max_uses:
+                invite.active = False
+
+        db.session.commit()
+
+        login_user(user)
+        flash("Konto erstellt." + (" Du bist der erste Nutzer und damit Administrator." if is_first_user else ""), "success")
+        return redirect(url_for("dashboard"))
+
+    return render_template("register.html", invite=invite_code)
+
+
+@app.route("/login", methods=["GET", "POST"])
+@limiter.limit("10 per minute", methods=["POST"])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for("dashboard"))
+
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        user = User.query.filter(func.lower(User.username) == username.lower()).first()
+
+        if user and user.check_password(password):
+            login_user(user)
+            return redirect(url_for("dashboard"))
+
+        flash("Benutzername oder Passwort ist falsch.", "error")
+        return render_template("login.html", username=username)
+
+    return render_template("login.html")
+
+
+@app.route("/logout")
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for("login"))
+
+
+# ---------------------------------------------------------------------------
+# Dashboard / Boards
+# ---------------------------------------------------------------------------
+
+@app.route("/")
+@login_required
+def dashboard():
+    boards = Board.query.order_by(Board.created_at.desc()).all()
+    return render_template("dashboard.html", boards=boards)
+
+
+@app.route("/board/<int:board_id>")
+@login_required
+def board_view(board_id):
+    board = db.session.get(Board, board_id) or abort(404)
+    people = board.people
+    dates = board.dates
+
+    entries = {}
+    for e in Entry.query.filter_by(board_id=board_id).all():
+        entries[f"{e.person_id}:{e.date_id}"] = e.status
+
+    weekdays = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
+    date_info = []
+    for d in dates:
+        stats = {"ok": 0, "warn": 0, "no": 0, "unset": 0}
+        for p in people:
+            st = entries.get(f"{p.id}:{d.id}", "unset")
+            stats[st] += 1
+        date_info.append({
+            "id": d.id,
+            "date": d.date.isoformat(),
+            "weekday": weekdays[d.date.weekday()],
+            "display": d.date.strftime("%d.%m."),
+            "stats": stats,
+        })
+
+    recent_logs = ChangeLog.query.filter_by(board_id=board_id).order_by(ChangeLog.timestamp.desc()).limit(25).all() if current_user.is_staff else []
+
+    my_person = next((p for p in people if p.user_id == current_user.id), None)
+
+    return render_template(
+        "board.html",
+        board=board,
+        people=people,
+        date_info=date_info,
+        entries=entries,
+        recent_logs=recent_logs,
+        my_person=my_person,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Board API (people / dates / entries)
+# ---------------------------------------------------------------------------
+
+@app.route("/api/board/<int:board_id>/person", methods=["POST"])
+@login_required
+@staff_required
+def api_add_person(board_id):
+    board = db.session.get(Board, board_id) or abort(404)
+    name = (request.json or {}).get("name", "").strip()
+    if not name:
+        return jsonify({"error": "Name fehlt"}), 400
+    max_order = db.session.query(func.max(Person.sort_order)).filter_by(board_id=board_id).scalar() or 0
+    person = Person(board_id=board_id, name=name[:60], sort_order=max_order + 1)
+    db.session.add(person)
+    log_action(board_id, "Person hinzugefügt", name)
+    db.session.commit()
+    return jsonify({"id": person.id, "name": person.name})
+
+
+@app.route("/api/board/<int:board_id>/join", methods=["POST"])
+@login_required
+def api_join_board(board_id):
+    """Ein Nutzer legt sich selbst eine eigene, bearbeitbare Zeile an."""
+    db.session.get(Board, board_id) or abort(404)
+    existing = Person.query.filter_by(board_id=board_id, user_id=current_user.id).first()
+    if existing:
+        return jsonify({"error": "Du hast bereits eine Zeile in diesem Board"}), 400
+
+    max_order = db.session.query(func.max(Person.sort_order)).filter_by(board_id=board_id).scalar() or 0
+    person = Person(board_id=board_id, name=current_user.display_name[:60], sort_order=max_order + 1, user_id=current_user.id)
+    db.session.add(person)
+    log_action(board_id, "Person ist beigetreten", current_user.display_name)
+    db.session.commit()
+    return jsonify({"id": person.id, "name": person.name})
+
+
+@app.route("/api/person/<int:person_id>", methods=["PATCH"])
+@login_required
+def api_rename_person(person_id):
+    person = db.session.get(Person, person_id) or abort(404)
+    if not can_edit_person(person):
+        abort(403)
+    name = (request.json or {}).get("name", "").strip()
+    if not name:
+        return jsonify({"error": "Name fehlt"}), 400
+    old_name = person.name
+    person.name = name[:60]
+    log_action(person.board_id, "Person umbenannt", f"{old_name} -> {person.name}")
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/person/<int:person_id>", methods=["DELETE"])
+@login_required
+def api_delete_person(person_id):
+    person = db.session.get(Person, person_id) or abort(404)
+    if not can_edit_person(person):
+        abort(403)
+    board_id = person.board_id
+    log_action(board_id, "Person entfernt", person.name)
+    db.session.delete(person)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/board/<int:board_id>/date", methods=["POST"])
+@login_required
+@staff_required
+def api_add_date(board_id):
+    db.session.get(Board, board_id) or abort(404)
+    raw = (request.json or {}).get("date", "")
+    try:
+        d = date_cls.fromisoformat(raw)
+    except ValueError:
+        return jsonify({"error": "Ungültiges Datum"}), 400
+    if EventDate.query.filter_by(board_id=board_id, date=d).first():
+        return jsonify({"error": "Termin existiert bereits"}), 400
+    event_date = EventDate(board_id=board_id, date=d)
+    db.session.add(event_date)
+    log_action(board_id, "Termin hinzugefügt", d.isoformat())
+    db.session.commit()
+    return jsonify({"id": event_date.id, "date": d.isoformat()})
+
+
+@app.route("/api/date/<int:date_id>", methods=["DELETE"])
+@login_required
+@staff_required
+def api_delete_date(date_id):
+    event_date = db.session.get(EventDate, date_id) or abort(404)
+    board_id = event_date.board_id
+    log_action(board_id, "Termin entfernt", event_date.date.isoformat())
+    db.session.delete(event_date)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/entry", methods=["POST"])
+@login_required
+def api_set_entry():
+    data = request.json or {}
+    person_id = data.get("person_id")
+    date_id = data.get("date_id")
+    status = data.get("status")
+
+    if status not in STATUS_VALUES:
+        return jsonify({"error": "Ungültiger Status"}), 400
+
+    person = db.session.get(Person, person_id) or abort(404)
+    event_date = db.session.get(EventDate, date_id) or abort(404)
+
+    if not can_edit_person(person):
+        abort(403)
+
+    entry = Entry.query.filter_by(person_id=person_id, date_id=date_id).first()
+    if not entry:
+        entry = Entry(board_id=person.board_id, person_id=person_id, date_id=date_id, status="unset")
+        db.session.add(entry)
+
+    entry.status = status
+    entry.updated_by = current_user.id
+    entry.updated_at = datetime.utcnow()
+
+    log_action(
+        person.board_id,
+        "Status geändert",
+        f"{person.name} / {event_date.date.isoformat()} -> {STATUS_LABEL.get(status, status)}",
+    )
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+# ---------------------------------------------------------------------------
+# PDF Export
+# ---------------------------------------------------------------------------
+
+@app.route("/board/<int:board_id>/export.pdf")
+@login_required
+@staff_required
+def export_pdf(board_id):
+    board = db.session.get(Board, board_id) or abort(404)
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet
+
+    people = board.people
+    dates = board.dates
+    entries = {}
+    for e in Entry.query.filter_by(board_id=board_id).all():
+        entries[(e.person_id, e.date_id)] = e.status
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=landscape(A4),
+        leftMargin=14 * mm, rightMargin=14 * mm, topMargin=14 * mm, bottomMargin=14 * mm,
+    )
+    styles = getSampleStyleSheet()
+    title_style = styles["Heading1"]
+    title_style.textColor = colors.HexColor("#171A21")
+    sub_style = styles["Normal"]
+    sub_style.textColor = colors.HexColor("#5B6270")
+
+    elements = [
+        Paragraph(board.name, title_style),
+        Paragraph(f"Exportiert am {datetime.now().strftime('%d.%m.%Y %H:%M')} Uhr", sub_style),
+        Spacer(1, 10 * mm),
+    ]
+
+    header = ["Name"] + [d.date.strftime("%d.%m.%Y") for d in dates]
+    rows = [header]
+
+    labels = {"ok": "OK", "warn": "VB", "no": "NEIN", "unset": "-"}
+    bg_colors = {
+        "ok": colors.HexColor("#E4F6EC"),
+        "warn": colors.HexColor("#FCEFDD"),
+        "no": colors.HexColor("#FBE7EB"),
+        "unset": colors.HexColor("#F2F3F5"),
+    }
+    text_colors = {
+        "ok": colors.HexColor("#1B9E5A"),
+        "warn": colors.HexColor("#D9822B"),
+        "no": colors.HexColor("#D6455D"),
+        "unset": colors.HexColor("#9AA0AC"),
+    }
+
+    for p in people:
+        row = [p.name]
+        for d in dates:
+            status = entries.get((p.id, d.id), "unset")
+            row.append(labels[status])
+        rows.append(row)
+
+    col_widths = [45 * mm] + [max(20 * mm, (247 * mm - 45 * mm) / max(len(dates), 1))] * len(dates)
+    table = Table(rows, colWidths=col_widths, repeatRows=1)
+
+    style_cmds = [
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#171A21")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("ALIGN", (1, 0), (-1, -1), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E6E8EC")),
+        ("ROWBACKGROUNDS", (0, 1), (0, -1), [colors.white, colors.HexColor("#FBFBFC")]),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]
+    for r, p in enumerate(people, start=1):
+        for c, d in enumerate(dates, start=1):
+            status = entries.get((p.id, d.id), "unset")
+            style_cmds.append(("BACKGROUND", (c, r), (c, r), bg_colors[status]))
+            style_cmds.append(("TEXTCOLOR", (c, r), (c, r), text_colors[status]))
+            style_cmds.append(("FONTNAME", (c, r), (c, r), "Helvetica-Bold"))
+
+    table.setStyle(TableStyle(style_cmds))
+    elements.append(table)
+    elements.append(Spacer(1, 8 * mm))
+    elements.append(Paragraph("OK = Verfügbar · VB = Mit Vorbehalt · NEIN = Nicht verfügbar · - = Offen", sub_style))
+
+    doc.build(elements)
+    buf.seek(0)
+
+    filename = f"{board.name.replace(' ', '_')}.pdf"
+    return send_file(buf, mimetype="application/pdf", as_attachment=True, download_name=filename)
+
+
+# ---------------------------------------------------------------------------
+# Admin
+# ---------------------------------------------------------------------------
+
+@app.route("/admin")
+@login_required
+@admin_required
+def admin_home():
+    users = User.query.order_by(User.created_at).all()
+    boards = Board.query.order_by(Board.created_at.desc()).all()
+    invites = Invite.query.order_by(Invite.created_at.desc()).all()
+    return render_template("admin.html", users=users, boards=boards, invites=invites)
+
+
+@app.route("/admin/invite", methods=["POST"])
+@login_required
+@admin_required
+def admin_create_invite():
+    label = request.form.get("label", "").strip()
+    max_uses = int(request.form.get("max_uses", 1) or 0)
+    expires_days = int(request.form.get("expires_days", 0) or 0)
+
+    invite = Invite(
+        code=secrets.token_urlsafe(9),
+        label=label[:80] or None,
+        created_by=current_user.id,
+        max_uses=max_uses,
+        expires_at=(datetime.utcnow() + timedelta(days=expires_days)) if expires_days else None,
+    )
+    db.session.add(invite)
+    db.session.commit()
+    flash("Einladungslink wurde erstellt.", "success")
+    return redirect(url_for("admin_home"))
+
+
+@app.route("/admin/invite/<int:invite_id>/revoke", methods=["POST"])
+@login_required
+@admin_required
+def admin_revoke_invite(invite_id):
+    invite = db.session.get(Invite, invite_id) or abort(404)
+    invite.active = False
+    db.session.commit()
+    flash("Einladungslink wurde widerrufen.", "success")
+    return redirect(url_for("admin_home"))
+
+
+@app.route("/admin/board", methods=["POST"])
+@login_required
+@admin_required
+def admin_create_board():
+    name = request.form.get("name", "").strip()
+    description = request.form.get("description", "").strip()
+    if not name:
+        flash("Bitte einen Namen für das Board angeben.", "error")
+        return redirect(url_for("admin_home"))
+    board = Board(name=name[:80], description=description[:240], created_by=current_user.id)
+    db.session.add(board)
+    db.session.commit()
+    flash(f"Board „{name}“ wurde angelegt.", "success")
+    return redirect(url_for("admin_home"))
+
+
+@app.route("/admin/board/<int:board_id>/delete", methods=["POST"])
+@login_required
+@admin_required
+def admin_delete_board(board_id):
+    board = db.session.get(Board, board_id) or abort(404)
+    db.session.delete(board)
+    db.session.commit()
+    flash("Board wurde gelöscht.", "success")
+    return redirect(url_for("admin_home"))
+
+
+@app.route("/admin/user/<int:user_id>/rename", methods=["POST"])
+@login_required
+@admin_required
+def admin_rename_user(user_id):
+    user = db.session.get(User, user_id) or abort(404)
+    display_name = request.form.get("display_name", "").strip()
+    if display_name:
+        user.display_name = display_name[:60]
+        db.session.commit()
+        flash("Anzeigename aktualisiert.", "success")
+    return redirect(url_for("admin_home"))
+
+
+@app.route("/admin/user/<int:user_id>/role", methods=["POST"])
+@login_required
+@admin_required
+def admin_set_role(user_id):
+    user = db.session.get(User, user_id) or abort(404)
+    new_role = request.form.get("role")
+    if new_role not in ("admin", "lehrer", "user"):
+        abort(400)
+    if user.id == current_user.id and new_role != "admin":
+        flash("Du kannst dir selbst nicht die Admin-Rechte entziehen.", "error")
+        return redirect(url_for("admin_home"))
+    user.role = new_role
+    db.session.commit()
+    flash(f"Rolle von {user.display_name} wurde geändert.", "success")
+    return redirect(url_for("admin_home"))
+
+
+@app.route("/admin/user/<int:user_id>/delete", methods=["POST"])
+@login_required
+@admin_required
+def admin_delete_user(user_id):
+    user = db.session.get(User, user_id) or abort(404)
+    if user.id == current_user.id:
+        flash("Du kannst dich nicht selbst löschen.", "error")
+        return redirect(url_for("admin_home"))
+    db.session.delete(user)
+    db.session.commit()
+    flash("Nutzer wurde gelöscht.", "success")
+    return redirect(url_for("admin_home"))
+
+
+# ---------------------------------------------------------------------------
+# Setup
+# ---------------------------------------------------------------------------
+
+@app.cli.command("init-db")
+def init_db():
+    with app.app_context():
+        db.create_all()
+    print("Datenbank initialisiert.")
+
+
+# JSON-API-Routen sind zustandsändernd per fetch() statt HTML-Formular.
+# Sie tragen keinen CSRF-Token, sind aber durch SameSite=Lax-Session-Cookies
+# bereits gegen Cross-Site-Anfragen abgesichert (Browser senden solche Cookies
+# nicht bei Cross-Origin-fetch/XHR-Requests).
+for view_name in (
+    "api_add_person", "api_join_board", "api_rename_person", "api_delete_person",
+    "api_add_date", "api_delete_date", "api_set_entry",
+):
+    csrf.exempt(app.view_functions[view_name])
+
+with app.app_context():
+    db.create_all()
+
+
+if __name__ == "__main__":
+    app.run(debug=True, port=5000)
