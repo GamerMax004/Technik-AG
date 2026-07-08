@@ -218,7 +218,8 @@ def board_view(board_id):
 
     recent_logs = ChangeLog.query.filter_by(board_id=board_id).order_by(ChangeLog.timestamp.desc()).limit(25).all() if current_user.is_staff else []
 
-    my_person = next((p for p in people if p.user_id == current_user.id), None)
+    already_ids = {p.user_id for p in people if p.user_id}
+    available_users = User.query.filter(~User.id.in_(already_ids)).order_by(User.display_name).all() if already_ids else User.query.order_by(User.display_name).all()
 
     return render_template(
         "board.html",
@@ -227,7 +228,7 @@ def board_view(board_id):
         date_info=date_info,
         entries=entries,
         recent_logs=recent_logs,
-        my_person=my_person,
+        available_users=available_users,
     )
 
 
@@ -240,30 +241,26 @@ def board_view(board_id):
 @staff_required
 def api_add_person(board_id):
     board = db.session.get(Board, board_id) or abort(404)
-    name = (request.json or {}).get("name", "").strip()
+    data = request.json or {}
+    user_id = data.get("user_id")
+    max_order = db.session.query(func.max(Person.sort_order)).filter_by(board_id=board_id).scalar() or 0
+
+    if user_id:
+        user = db.session.get(User, user_id) or abort(404)
+        if Person.query.filter_by(board_id=board_id, user_id=user.id).first():
+            return jsonify({"error": "Dieser Nutzer ist bereits in diesem Board"}), 400
+        person = Person(board_id=board_id, name=user.display_name[:60], sort_order=max_order + 1, user_id=user.id)
+        db.session.add(person)
+        log_action(board_id, "Nutzer hinzugefügt", user.display_name)
+        db.session.commit()
+        return jsonify({"id": person.id, "name": person.name})
+
+    name = data.get("name", "").strip()
     if not name:
         return jsonify({"error": "Name fehlt"}), 400
-    max_order = db.session.query(func.max(Person.sort_order)).filter_by(board_id=board_id).scalar() or 0
     person = Person(board_id=board_id, name=name[:60], sort_order=max_order + 1)
     db.session.add(person)
-    log_action(board_id, "Person hinzugefügt", name)
-    db.session.commit()
-    return jsonify({"id": person.id, "name": person.name})
-
-
-@app.route("/api/board/<int:board_id>/join", methods=["POST"])
-@login_required
-def api_join_board(board_id):
-    """Ein Nutzer legt sich selbst eine eigene, bearbeitbare Zeile an."""
-    db.session.get(Board, board_id) or abort(404)
-    existing = Person.query.filter_by(board_id=board_id, user_id=current_user.id).first()
-    if existing:
-        return jsonify({"error": "Du hast bereits eine Zeile in diesem Board"}), 400
-
-    max_order = db.session.query(func.max(Person.sort_order)).filter_by(board_id=board_id).scalar() or 0
-    person = Person(board_id=board_id, name=current_user.display_name[:60], sort_order=max_order + 1, user_id=current_user.id)
-    db.session.add(person)
-    log_action(board_id, "Person ist beigetreten", current_user.display_name)
+    log_action(board_id, "Gast hinzugefügt", name)
     db.session.commit()
     return jsonify({"id": person.id, "name": person.name})
 
@@ -375,8 +372,8 @@ def export_pdf(board_id):
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib.units import mm
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Spacer
+    from reportlab.pdfgen import canvas as pdfcanvas
 
     people = board.people
     dates = board.dates
@@ -384,75 +381,123 @@ def export_pdf(board_id):
     for e in Entry.query.filter_by(board_id=board_id).all():
         entries[(e.person_id, e.date_id)] = e.status
 
+    ACCENT = colors.HexColor("#3D4CE0")
+    INK = colors.HexColor("#171A21")
+    INK_SOFT = colors.HexColor("#5B6270")
+    LINE = colors.HexColor("#E6E8EC")
+    HEADER_BG = colors.HexColor("#F3F4F9")
+
+    STATUS_META = {
+        "ok":    ("Verfügbar",       "OK",   colors.HexColor("#1B9E5A"), colors.HexColor("#E4F6EC")),
+        "warn":  ("Mit Vorbehalt",   "VB",   colors.HexColor("#D9822B"), colors.HexColor("#FCEFDD")),
+        "no":    ("Nicht verfügbar", "NEIN", colors.HexColor("#D6455D"), colors.HexColor("#FBE7EB")),
+        "unset": ("Offen",           "-",    colors.HexColor("#9AA0AC"), colors.HexColor("#F2F3F5")),
+    }
+
+    generated_at = datetime.now().strftime("%d.%m.%Y, %H:%M Uhr")
+    LM = 14 * mm  # linker/rechter Rand, deckt sich mit Dokumentrand
+
+    class ChromeCanvas(pdfcanvas.Canvas):
+        """Zeichnet Kopfbanner, Legende und Fußzeile mit Seitenzahl auf jede Seite."""
+
+        def __init__(self, *args, **kwargs):
+            pdfcanvas.Canvas.__init__(self, *args, **kwargs)
+            self._saved_page_states = []
+
+        def showPage(self):
+            self._saved_page_states.append(dict(self.__dict__))
+            self._startPage()
+
+        def save(self):
+            total = len(self._saved_page_states)
+            for state in self._saved_page_states:
+                self.__dict__.update(state)
+                self._draw_chrome(total)
+                pdfcanvas.Canvas.showPage(self)
+            pdfcanvas.Canvas.save(self)
+
+        def _draw_chrome(self, total_pages):
+            width, height = self._pagesize
+
+            # Kopfbanner
+            self.setFillColor(ACCENT)
+            self.rect(0, height - 60, width, 60, fill=1, stroke=0)
+            self.setFillColor(colors.white)
+            self.setFont("Helvetica-Bold", 16)
+            self.drawString(LM, height - 30, board.name)
+            self.setFont("Helvetica", 9)
+            self.drawString(LM, height - 44, board.description or "Verfügbarkeitsübersicht")
+            self.setFont("Helvetica", 8)
+            self.drawRightString(width - LM, height - 27, "Erstellt am")
+            self.drawRightString(width - LM, height - 39, generated_at)
+
+            # Legende
+            legend_y = height - 76
+            x = LM
+            for key in ("ok", "warn", "no", "unset"):
+                label, _, text_color, bg_color = STATUS_META[key]
+                self.setFillColor(bg_color)
+                self.roundRect(x, legend_y - 3, 10, 10, 2, fill=1, stroke=0)
+                self.setFillColor(INK_SOFT)
+                self.setFont("Helvetica", 8.5)
+                self.drawString(x + 15, legend_y, label)
+                x += 15 + self.stringWidth(label, "Helvetica", 8.5) + 20
+
+            # Fusszeile
+            self.setStrokeColor(LINE)
+            self.setLineWidth(0.6)
+            self.line(LM, 15 * mm, width - LM, 15 * mm)
+            self.setFont("Helvetica", 8)
+            self.setFillColor(INK_SOFT)
+            self.drawString(LM, 10 * mm, "Verfügbarkeitsplaner")
+            self.drawRightString(width - LM, 10 * mm, f"Seite {self.getPageNumber()} von {total_pages}")
+
     buf = BytesIO()
     doc = SimpleDocTemplate(
         buf, pagesize=landscape(A4),
-        leftMargin=14 * mm, rightMargin=14 * mm, topMargin=14 * mm, bottomMargin=14 * mm,
+        leftMargin=LM, rightMargin=LM, topMargin=34 * mm, bottomMargin=20 * mm,
     )
-    styles = getSampleStyleSheet()
-    title_style = styles["Heading1"]
-    title_style.textColor = colors.HexColor("#171A21")
-    sub_style = styles["Normal"]
-    sub_style.textColor = colors.HexColor("#5B6270")
 
-    elements = [
-        Paragraph(board.name, title_style),
-        Paragraph(f"Exportiert am {datetime.now().strftime('%d.%m.%Y %H:%M')} Uhr", sub_style),
-        Spacer(1, 10 * mm),
-    ]
-
-    header = ["Name"] + [d.date.strftime("%d.%m.%Y") for d in dates]
-    rows = [header]
-
-    labels = {"ok": "OK", "warn": "VB", "no": "NEIN", "unset": "-"}
-    bg_colors = {
-        "ok": colors.HexColor("#E4F6EC"),
-        "warn": colors.HexColor("#FCEFDD"),
-        "no": colors.HexColor("#FBE7EB"),
-        "unset": colors.HexColor("#F2F3F5"),
-    }
-    text_colors = {
-        "ok": colors.HexColor("#1B9E5A"),
-        "warn": colors.HexColor("#D9822B"),
-        "no": colors.HexColor("#D6455D"),
-        "unset": colors.HexColor("#9AA0AC"),
-    }
-
+    header_row = ["Name"] + [d.date.strftime("%d.%m.%Y") for d in dates]
+    rows = [header_row]
     for p in people:
         row = [p.name]
         for d in dates:
             status = entries.get((p.id, d.id), "unset")
-            row.append(labels[status])
+            row.append(STATUS_META[status][1])
         rows.append(row)
 
-    col_widths = [45 * mm] + [max(20 * mm, (247 * mm - 45 * mm) / max(len(dates), 1))] * len(dates)
+    usable_width = landscape(A4)[0] - 2 * LM
+    name_col = 48 * mm
+    col_widths = [name_col] + [max(20 * mm, (usable_width - name_col) / max(len(dates), 1))] * len(dates)
     table = Table(rows, colWidths=col_widths, repeatRows=1)
 
     style_cmds = [
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#171A21")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("BACKGROUND", (0, 0), (-1, 0), HEADER_BG),
+        ("TEXTCOLOR", (0, 0), (-1, 0), INK),
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("FONTNAME", (0, 1), (0, -1), "Helvetica-Bold"),
+        ("TEXTCOLOR", (0, 1), (0, -1), INK),
+        ("FONTSIZE", (0, 0), (-1, -1), 9.5),
         ("ALIGN", (1, 0), (-1, -1), "CENTER"),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E6E8EC")),
+        ("GRID", (0, 0), (-1, -1), 0.6, LINE),
+        ("LINEBELOW", (0, 0), (-1, 0), 1, ACCENT),
         ("ROWBACKGROUNDS", (0, 1), (0, -1), [colors.white, colors.HexColor("#FBFBFC")]),
-        ("TOPPADDING", (0, 0), (-1, -1), 6),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 7),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+        ("LEFTPADDING", (0, 0), (0, -1), 10),
     ]
     for r, p in enumerate(people, start=1):
         for c, d in enumerate(dates, start=1):
             status = entries.get((p.id, d.id), "unset")
-            style_cmds.append(("BACKGROUND", (c, r), (c, r), bg_colors[status]))
-            style_cmds.append(("TEXTCOLOR", (c, r), (c, r), text_colors[status]))
+            style_cmds.append(("BACKGROUND", (c, r), (c, r), STATUS_META[status][3]))
+            style_cmds.append(("TEXTCOLOR", (c, r), (c, r), STATUS_META[status][2]))
             style_cmds.append(("FONTNAME", (c, r), (c, r), "Helvetica-Bold"))
 
     table.setStyle(TableStyle(style_cmds))
-    elements.append(table)
-    elements.append(Spacer(1, 8 * mm))
-    elements.append(Paragraph("OK = Verfügbar · VB = Mit Vorbehalt · NEIN = Nicht verfügbar · - = Offen", sub_style))
 
-    doc.build(elements)
+    doc.build([table], canvasmaker=ChromeCanvas)
     buf.seek(0)
 
     filename = f"{board.name.replace(' ', '_')}.pdf"
@@ -592,7 +637,7 @@ def init_db():
 # bereits gegen Cross-Site-Anfragen abgesichert (Browser senden solche Cookies
 # nicht bei Cross-Origin-fetch/XHR-Requests).
 for view_name in (
-    "api_add_person", "api_join_board", "api_rename_person", "api_delete_person",
+    "api_add_person", "api_rename_person", "api_delete_person",
     "api_add_date", "api_delete_date", "api_set_entry",
 ):
     csrf.exempt(app.view_functions[view_name])
