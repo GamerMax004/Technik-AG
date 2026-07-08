@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block title %}Admin – Verfügbarkeitsplaner{% endblock %}
+{% block content %}
+<header class="top">
+  <div>
+    <p class="eyebrow">Verwaltung</p>
+    <h1>Adminbereich</h1>
+    <p>Boards, Nutzer und Einladungen verwalten.</p>
+  </div>
+</header>
+
+<section class="admin-section">
+  <h2>Einladungen</h2>
+  <div class="panel admin-panel">
+    <p class="section-hint">Registrierung ist nur mit einem gültigen Einladungslink möglich. Lege hier neue Links an.</p>
+    <form method="post" action="{{ url_for('admin_create_invite') }}" class="admin-inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="text" name="label" placeholder="Bezeichnung (optional, z.B. „Klasse 10b“)" maxlength="80">
+      <select name="max_uses">
+        <option value="1">Einmal verwendbar</option>
+        <option value="5">5 Nutzungen</option>
+        <option value="10">10 Nutzungen</option>
+        <option value="0">Unbegrenzt</option>
+      </select>
+      <select name="expires_days">
+        <option value="0">Kein Ablaufdatum</option>
+        <option value="1">1 Tag gültig</option>
+        <option value="7" selected>7 Tage gültig</option>
+        <option value="30">30 Tage gültig</option>
+      </select>
+      <button class="btn primary" type="submit">Einladungslink erstellen</button>
+    </form>
+
+    <table class="admin-table">
+      <thead><tr><th>Bezeichnung</th><th>Link</th><th>Nutzung</th><th>Läuft ab</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        {% for invite in invites %}
+        <tr>
+          <td>{{ invite.label or "–" }}</td>
+          <td>
+            <div class="invite-link-row">
+              <input type="text" class="invite-link-field mono" readonly value="{{ request.host_url.rstrip('/') }}{{ url_for('register', invite=invite.code) }}">
+              <button type="button" class="btn ghost copy-btn" data-copy-target="invite-{{ invite.id }}">Kopieren</button>
+            </div>
+            <input type="hidden" id="invite-{{ invite.id }}" value="{{ request.host_url.rstrip('/') }}{{ url_for('register', invite=invite.code) }}">
+          </td>
+          <td class="mono">{{ invite.uses_count }} / {{ invite.max_uses if invite.max_uses > 0 else "∞" }}</td>
+          <td class="muted">{{ invite.expires_at.strftime('%d.%m.%Y') if invite.expires_at else "–" }}</td>
+          <td>
+            {% if invite.is_valid() %}
+              <span class="status-badge status-ok">Aktiv</span>
+            {% else %}
+              <span class="status-badge status-no">{{ "Widerrufen" if not invite.active else "Abgelaufen" }}</span>
+            {% endif %}
+          </td>
+          <td class="admin-row-actions">
+            {% if invite.active %}
+            <form method="post" action="{{ url_for('admin_revoke_invite', invite_id=invite.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn ghost" type="submit">Widerrufen</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="muted">Noch keine Einladungen erstellt.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="admin-section">
+  <h2>Boards</h2>
+  <div class="panel admin-panel">
+    <form method="post" action="{{ url_for('admin_create_board') }}" class="admin-inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="text" name="name" placeholder="Name des Boards" maxlength="80" required>
+      <input type="text" name="description" placeholder="Beschreibung (optional)" maxlength="240">
+      <button class="btn primary" type="submit">Board anlegen</button>
+    </form>
+
+    <table class="admin-table">
+      <thead><tr><th>Name</th><th>Beschreibung</th><th>Personen</th><th>Termine</th><th></th></tr></thead>
+      <tbody>
+        {% for board in boards %}
+        <tr>
+          <td><a href="{{ url_for('board_view', board_id=board.id) }}">{{ board.name }}</a></td>
+          <td class="muted">{{ board.description or "–" }}</td>
+          <td>{{ board.people|length }}</td>
+          <td>{{ board.dates|length }}</td>
+          <td class="admin-row-actions">
+            <form method="post" action="{{ url_for('admin_delete_board', board_id=board.id) }}" onsubmit="return confirm('Board wirklich löschen? Alle Daten darin gehen verloren.');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn ghost" type="submit">Löschen</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="muted">Noch keine Boards angelegt.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="admin-section">
+  <h2>Nutzer</h2>
+  <div class="panel admin-panel">
+    <p class="section-hint">Admin: volle Verwaltung. Lehrer: darf Boards befüllen, jede Zeile bearbeiten und PDFs exportieren. Nutzer: nur die eigene Zeile.</p>
+    <table class="admin-table">
+      <thead><tr><th>Anzeigename</th><th>Benutzername</th><th>Rolle</th><th></th></tr></thead>
+      <tbody>
+        {% for user in users %}
+        <tr>
+          <td>
+            <form method="post" action="{{ url_for('admin_rename_user', user_id=user.id) }}" class="admin-inline-form small">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="text" name="display_name" value="{{ user.display_name }}" maxlength="60">
+              <button class="btn ghost" type="submit">Speichern</button>
+            </form>
+          </td>
+          <td class="mono">{{ user.username }}</td>
+          <td>
+            <form method="post" action="{{ url_for('admin_set_role', user_id=user.id) }}" class="admin-inline-form small">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <select name="role">
+                <option value="user" {% if user.role == 'user' %}selected{% endif %}>Nutzer</option>
+                <option value="lehrer" {% if user.role == 'lehrer' %}selected{% endif %}>Lehrer</option>
+                <option value="admin" {% if user.role == 'admin' %}selected{% endif %}>Administrator</option>
+              </select>
+              <button class="btn ghost" type="submit">Übernehmen</button>
+            </form>
+          </td>
+          <td class="admin-row-actions">
+            {% if user.id != current_user.id %}
+            <form method="post" action="{{ url_for('admin_delete_user', user_id=user.id) }}" onsubmit="return confirm('Nutzer wirklich löschen?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn ghost" type="submit">Löschen</button>
+            </form>
+            {% else %}
+            <span class="muted">Du</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<script>
+document.querySelectorAll('.copy-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const field = document.getElementById(btn.dataset.copyTarget);
+    navigator.clipboard.writeText(field.value).then(() => {
+      const original = btn.textContent;
+      btn.textContent = 'Kopiert!';
+      setTimeout(() => { btn.textContent = original; }, 1500);
+    });
+  });
+});
+</script>
+{% endblock %}
