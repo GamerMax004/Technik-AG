@@ -59,66 +59,12 @@
   </div>
 
   {% if current_user.is_staff %}
-    {% if people and date_info %}
+    {% if date_info %}
+    <div class="staff-view">
 
-    <!-- Desktop/Tablet: volle Tabelle -->
-    <div class="table-scroll staff-desktop-view">
-      <table class="grid">
-        <thead>
-          <tr>
-            <th class="corner"></th>
-            {% for d in date_info %}
-            <th class="col-head" data-date-id="{{ d.id }}">
-              <div class="dhead">
-                <span class="wd">{{ d.weekday }}</span>
-                <span class="dd">{{ d.display }}</span>
-                {% if d.label %}<span class="date-note" title="{{ d.label }}">{{ d.label }}</span>{% endif %}
-                {% set total = people|length %}
-                <div class="bar" title="{{ d.stats.ok }} verfügbar · {{ d.stats.warn }} mit Vorbehalt · {{ d.stats.no }} nicht verfügbar">
-                  <span style="width:{{ (d.stats.ok / total * 100) if total else 0 }}%; background:var(--ok)"></span>
-                  <span style="width:{{ (d.stats.warn / total * 100) if total else 0 }}%; background:var(--warn)"></span>
-                  <span style="width:{{ (d.stats.no / total * 100) if total else 0 }}%; background:var(--no)"></span>
-                </div>
-                <button class="btn ghost del" data-remove-date="{{ d.id }}" aria-label="Termin entfernen" title="Termin entfernen">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
-                </button>
-              </div>
-            </th>
-            {% endfor %}
-          </tr>
-        </thead>
-        <tbody>
-          {% for p in people %}
-          <tr class="{{ 'my-row' if p.user_id == current_user.id }}">
-            <td class="row-head">
-              <div class="rh">
-                <div class="name-wrap">
-                  <input class="name-input" data-rename="{{ p.id }}" value="{{ p.name }}" maxlength="40">
-                  {% if p.user_id == current_user.id %}<span class="me-badge">Du</span>{% endif %}
-                </div>
-                <button class="btn ghost person-delete" data-remove-person="{{ p.id }}" aria-label="Person entfernen" title="Person entfernen">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
-                </button>
-              </div>
-            </td>
-            {% for d in date_info %}
-            {% set status = entries.get(p.id ~ ':' ~ d.id, 'unset') %}
-            <td class="cell-td">
-              <button class="cell" data-person="{{ p.id }}" data-date="{{ d.id }}" data-status="{{ status }}" aria-label="Status: {{ status }}">
-                <span class="chip {{ status }}"></span>
-              </button>
-            </td>
-            {% endfor %}
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-
-    <!-- Handy: Kartenansicht, gleiches Prinzip wie bei normalen Nutzern -->
-    <div class="staff-mobile-view">
-      <div class="staff-mobile-section">
-        <h4 class="staff-mobile-heading">Personen</h4>
+      <div class="staff-section">
+        <h4 class="staff-heading">Personen</h4>
+        {% if people %}
         <div class="staff-people-list">
           {% for p in people %}
           <div class="staff-person-edit {{ 'my-row' if p.user_id == current_user.id }}">
@@ -132,10 +78,13 @@
           </div>
           {% endfor %}
         </div>
+        {% else %}
+        <p class="staff-empty-hint">Noch niemand hinzugefügt — oben über das Auswahlmenü.</p>
+        {% endif %}
       </div>
 
-      <div class="staff-mobile-section">
-        <h4 class="staff-mobile-heading">Termine</h4>
+      <div class="staff-section">
+        <h4 class="staff-heading">Termine</h4>
         <div class="day-list">
           {% for d in date_info %}
           <div class="day-card staff-day-card">
@@ -149,24 +98,44 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
               </button>
             </div>
+
+            <div class="attachment-row" data-attachment-row="{{ d.id }}">
+              {% if d.attachment %}
+              <a class="attachment-chip" href="{{ url_for('download_attachment', date_id=d.id) }}" target="_blank" rel="noopener">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
+                <span>{{ d.attachment }}</span>
+              </a>
+              <button class="btn ghost attachment-remove" data-remove-attachment="{{ d.id }}" aria-label="Anhang entfernen" title="Anhang entfernen">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>
+              </button>
+              {% else %}
+              <label class="attachment-upload-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
+                PDF anhängen
+                <input type="file" accept="application/pdf" class="attachment-input" data-upload-attachment="{{ d.id }}" hidden>
+              </label>
+              {% endif %}
+            </div>
+
             <div class="staff-person-rows">
               {% for p in people %}
               {% set status = entries.get(p.id ~ ':' ~ d.id, 'unset') %}
               <div class="staff-person-row">
                 <span class="staff-person-name">{{ p.name }}{% if p.user_id == current_user.id %} <span class="me-badge">Du</span>{% endif %}</span>
-                <button class="status-pill compact {{ status }}" data-person="{{ p.id }}" data-date="{{ d.id }}" data-status="{{ status }}" aria-label="Status: {{ status }}">
-                  <span class="status-pill-icon"></span>
-                  <span class="status-pill-label"></span>
+                <button class="cell check" data-person="{{ p.id }}" data-date="{{ d.id }}" data-status="{{ status }}" aria-label="Status: {{ status }}">
+                  <span class="chip {{ status }}"></span>
                 </button>
               </div>
+              {% else %}
+              <p class="staff-empty-hint">Noch keine Personen im Board.</p>
               {% endfor %}
             </div>
           </div>
           {% endfor %}
         </div>
       </div>
-    </div>
 
+    </div>
     {% else %}
     <div class="empty">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/><path d="M9 16l2 2 4-4"/></svg>
@@ -184,6 +153,12 @@
           <span class="day-card-weekday">{{ d.weekday }}</span>
           <span class="day-card-date mono">{{ d.display }}</span>
           {% if d.label %}<span class="day-card-note">{{ d.label }}</span>{% endif %}
+          {% if d.attachment %}
+          <a class="attachment-chip" href="{{ url_for('download_attachment', date_id=d.id) }}" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
+            <span>{{ d.attachment }}</span>
+          </a>
+          {% endif %}
         </div>
         <button class="status-pill {{ d.my_status }}" data-person="{{ my_person.id }}" data-date="{{ d.id }}" data-status="{{ d.my_status }}">
           <span class="status-pill-icon"></span>
