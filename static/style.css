@@ -231,6 +231,7 @@ tr.my-row .row-head{ box-shadow: inset 3px 0 0 var(--accent); }
   position:fixed; inset:0; background: rgba(23,26,33,0.45);
   display:flex; align-items:center; justify-content:center; padding:20px; z-index:50;
 }
+.modal-backdrop[hidden]{ display:none; }
 .modal-panel{
   background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow);
   width:100%; max-width:640px; max-height:80vh; display:flex; flex-direction:column; padding:22px;
