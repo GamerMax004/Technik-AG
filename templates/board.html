@@ -42,11 +42,6 @@
       <button class="btn primary" id="addUserBtn" {{ 'disabled' if not available_users }}>Hinzufügen</button>
     </div>
     <div class="field">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--ink-soft); flex-shrink:0;"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-      <input type="text" id="personInput" placeholder="Gast ohne Konto" maxlength="40">
-      <button class="btn primary" id="addPersonBtn">Hinzufügen</button>
-    </div>
-    <div class="field">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--ink-soft); flex-shrink:0;"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></svg>
       <input type="date" id="dateInput">
       <input type="text" id="dateLabelInput" placeholder="Titel/Notiz (optional)" maxlength="60">
@@ -60,12 +55,14 @@
     <div class="item"><span class="dot warn"></span> Mit Vorbehalt</div>
     <div class="item"><span class="dot no"></span> Nicht verfügbar</div>
     <div class="item"><span class="dot unset"></span> Noch offen</div>
-    <div class="hint">{% if current_user.is_staff %}Klick auf eine Zelle wechselt den Status{% else %}Klick auf den Status wechselt ihn{% endif %}</div>
+    <div class="hint">{% if current_user.is_staff %}Antippen wechselt den Status{% else %}Antippen wechselt deinen Status{% endif %}</div>
   </div>
 
   {% if current_user.is_staff %}
     {% if people and date_info %}
-    <div class="table-scroll">
+
+    <!-- Desktop/Tablet: volle Tabelle -->
+    <div class="table-scroll staff-desktop-view">
       <table class="grid">
         <thead>
           <tr>
@@ -117,6 +114,59 @@
         </tbody>
       </table>
     </div>
+
+    <!-- Handy: Kartenansicht, gleiches Prinzip wie bei normalen Nutzern -->
+    <div class="staff-mobile-view">
+      <div class="staff-mobile-section">
+        <h4 class="staff-mobile-heading">Personen</h4>
+        <div class="staff-people-list">
+          {% for p in people %}
+          <div class="staff-person-edit {{ 'my-row' if p.user_id == current_user.id }}">
+            <div class="name-wrap">
+              <input class="name-input" data-rename="{{ p.id }}" value="{{ p.name }}" maxlength="40">
+              {% if p.user_id == current_user.id %}<span class="me-badge">Du</span>{% endif %}
+            </div>
+            <button class="btn ghost person-delete" data-remove-person="{{ p.id }}" aria-label="Person entfernen" title="Person entfernen">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+            </button>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="staff-mobile-section">
+        <h4 class="staff-mobile-heading">Termine</h4>
+        <div class="day-list">
+          {% for d in date_info %}
+          <div class="day-card staff-day-card">
+            <div class="staff-day-card-header">
+              <div class="day-card-info">
+                <span class="day-card-weekday">{{ d.weekday }}</span>
+                <span class="day-card-date mono">{{ d.display }}</span>
+                {% if d.label %}<span class="day-card-note">{{ d.label }}</span>{% endif %}
+              </div>
+              <button class="btn ghost" data-remove-date="{{ d.id }}" aria-label="Termin entfernen" title="Termin entfernen">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+              </button>
+            </div>
+            <div class="staff-person-rows">
+              {% for p in people %}
+              {% set status = entries.get(p.id ~ ':' ~ d.id, 'unset') %}
+              <div class="staff-person-row">
+                <span class="staff-person-name">{{ p.name }}{% if p.user_id == current_user.id %} <span class="me-badge">Du</span>{% endif %}</span>
+                <button class="status-pill compact {{ status }}" data-person="{{ p.id }}" data-date="{{ d.id }}" data-status="{{ status }}" aria-label="Status: {{ status }}">
+                  <span class="status-pill-icon"></span>
+                  <span class="status-pill-label"></span>
+                </button>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
     {% else %}
     <div class="empty">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/><path d="M9 16l2 2 4-4"/></svg>
