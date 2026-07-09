@@ -257,27 +257,20 @@ def board_view(board_id):
 @login_required
 @staff_required
 def api_add_person(board_id):
-    board = db.session.get(Board, board_id) or abort(404)
+    db.session.get(Board, board_id) or abort(404)
     data = request.json or {}
     user_id = data.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Nutzer fehlt"}), 400
+
+    user = db.session.get(User, user_id) or abort(404)
+    if Person.query.filter_by(board_id=board_id, user_id=user.id).first():
+        return jsonify({"error": "Dieser Nutzer ist bereits in diesem Board"}), 400
+
     max_order = db.session.query(func.max(Person.sort_order)).filter_by(board_id=board_id).scalar() or 0
-
-    if user_id:
-        user = db.session.get(User, user_id) or abort(404)
-        if Person.query.filter_by(board_id=board_id, user_id=user.id).first():
-            return jsonify({"error": "Dieser Nutzer ist bereits in diesem Board"}), 400
-        person = Person(board_id=board_id, name=user.display_name[:60], sort_order=max_order + 1, user_id=user.id)
-        db.session.add(person)
-        log_action(board_id, "Nutzer hinzugefügt", user.display_name)
-        db.session.commit()
-        return jsonify({"id": person.id, "name": person.name})
-
-    name = data.get("name", "").strip()
-    if not name:
-        return jsonify({"error": "Name fehlt"}), 400
-    person = Person(board_id=board_id, name=name[:60], sort_order=max_order + 1)
+    person = Person(board_id=board_id, name=user.display_name[:60], sort_order=max_order + 1, user_id=user.id)
     db.session.add(person)
-    log_action(board_id, "Gast hinzugefügt", name)
+    log_action(board_id, "Nutzer hinzugefügt", user.display_name)
     db.session.commit()
     return jsonify({"id": person.id, "name": person.name})
 
