@@ -24,7 +24,7 @@
     <h3>{{ board.name }}</h3>
     <p>{{ board.description or "Keine Beschreibung" }}</p>
     <div class="board-card-meta">
-      <span>{{ board.people|length }} Personen</span>
+      {% if current_user.is_staff %}<span>{{ board.people|length }} Personen</span>{% endif %}
       <span>{{ board.dates|length }} Termine</span>
     </div>
   </a>
@@ -34,7 +34,11 @@
 <div class="panel empty">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></svg>
   <h3>Noch keine Boards vorhanden</h3>
-  <p>{% if current_user.is_admin %}Lege im Adminbereich dein erstes Board an.{% else %}Ein Administrator muss zuerst ein Board anlegen.{% endif %}</p>
+  <p>
+    {% if current_user.is_admin %}Lege im Adminbereich dein erstes Board an.
+    {% elif current_user.is_staff %}Noch hat niemand ein Board angelegt.
+    {% else %}Ein Administrator oder Lehrer muss dich zuerst zu einem Board hinzufügen.{% endif %}
+  </p>
 </div>
 {% endif %}
 {% endblock %}
