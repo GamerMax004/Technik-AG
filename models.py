@@ -76,6 +76,12 @@ class EventDate(db.Model):
     date = db.Column(db.Date, nullable=False)
     label = db.Column(db.String(60))
 
+    # Optionaler PDF-Anhang, direkt in der Datenbank gespeichert (Render-Dateisystem ist nicht dauerhaft)
+    attachment_filename = db.Column(db.String(255))
+    attachment_data = db.Column(db.LargeBinary)
+    attachment_uploaded_at = db.Column(db.DateTime)
+    attachment_uploaded_by = db.Column(db.Integer, db.ForeignKey("users.id"))
+
     entries = db.relationship("Entry", backref="event_date", cascade="all, delete-orphan")
 
 

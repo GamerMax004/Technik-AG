@@ -27,6 +27,7 @@ if database_url.startswith("postgres://"):
     database_url = database_url.replace("postgres://", "postgresql://", 1)
 app.config["SQLALCHEMY_DATABASE_URI"] = database_url
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_pre_ping": True}
+app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10 MB, v.a. wegen PDF-Anhängen
 
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_SECURE"] = os.environ.get("FLASK_ENV") == "production"
@@ -201,7 +202,9 @@ def dashboard():
 @login_required
 def board_view(board_id):
     board = db.session.get(Board, board_id) or abort(404)
-    people = board.people
+    all_people = board.people
+    # Lehrer und Admin sind Verwalter, keine Teilnehmer: sie erscheinen nicht in der Personenliste.
+    people = [p for p in all_people if not p.user or p.user.role == "user"]
     dates = board.dates
 
     my_person = next((p for p in people if p.user_id == current_user.id), None)
@@ -229,13 +232,18 @@ def board_view(board_id):
             "label": d.label or "",
             "stats": stats,
             "my_status": entries.get(f"{my_person.id}:{d.id}", "unset") if my_person else "unset",
+            "attachment": d.attachment_filename,
         })
 
     # Änderungsprotokoll: ausschließlich für echte Administratoren, nicht für Lehrer.
     recent_logs = ChangeLog.query.filter_by(board_id=board_id).order_by(ChangeLog.timestamp.desc()).limit(50).all() if current_user.is_admin else []
 
-    already_ids = {p.user_id for p in people if p.user_id}
-    available_users = User.query.filter(~User.id.in_(already_ids)).order_by(User.display_name).all() if already_ids else User.query.order_by(User.display_name).all()
+    already_ids = {p.user_id for p in all_people if p.user_id}
+    available_users = (
+        User.query.filter(User.role == "user", ~User.id.in_(already_ids)).order_by(User.display_name).all()
+        if already_ids else
+        User.query.filter(User.role == "user").order_by(User.display_name).all()
+    )
 
     return render_template(
         "board.html",
@@ -338,6 +346,67 @@ def api_delete_date(date_id):
     return jsonify({"ok": True})
 
 
+@app.route("/api/date/<int:date_id>/attachment", methods=["POST"])
+@login_required
+@staff_required
+def api_upload_attachment(date_id):
+    event_date = db.session.get(EventDate, date_id) or abort(404)
+    file = request.files.get("file")
+    if not file or not file.filename:
+        return jsonify({"error": "Keine Datei ausgewählt"}), 400
+    if not file.filename.lower().endswith(".pdf"):
+        return jsonify({"error": "Nur PDF-Dateien sind erlaubt"}), 400
+
+    data = file.read()
+    if len(data) > 10 * 1024 * 1024:
+        return jsonify({"error": "Datei ist zu groß (max. 10 MB)"}), 400
+
+    event_date.attachment_filename = file.filename[:255]
+    event_date.attachment_data = data
+    event_date.attachment_uploaded_at = datetime.utcnow()
+    event_date.attachment_uploaded_by = current_user.id
+    log_action(event_date.board_id, "PDF angehängt", f"{event_date.date.isoformat()} – {file.filename}")
+    db.session.commit()
+    return jsonify({"ok": True, "filename": event_date.attachment_filename})
+
+
+@app.route("/api/date/<int:date_id>/attachment", methods=["DELETE"])
+@login_required
+@staff_required
+def api_delete_attachment(date_id):
+    event_date = db.session.get(EventDate, date_id) or abort(404)
+    old_name = event_date.attachment_filename
+    event_date.attachment_filename = None
+    event_date.attachment_data = None
+    event_date.attachment_uploaded_at = None
+    event_date.attachment_uploaded_by = None
+    log_action(event_date.board_id, "PDF entfernt", f"{event_date.date.isoformat()} – {old_name}" if old_name else event_date.date.isoformat())
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/date/<int:date_id>/attachment")
+@login_required
+def download_attachment(date_id):
+    event_date = db.session.get(EventDate, date_id) or abort(404)
+    board = db.session.get(Board, event_date.board_id) or abort(404)
+
+    if not current_user.is_staff:
+        my_person = Person.query.filter_by(board_id=board.id, user_id=current_user.id).first()
+        if not my_person:
+            abort(403)
+
+    if not event_date.attachment_data:
+        abort(404)
+
+    return send_file(
+        BytesIO(event_date.attachment_data),
+        mimetype="application/pdf",
+        as_attachment=False,
+        download_name=event_date.attachment_filename or "anhang.pdf",
+    )
+
+
 @app.route("/api/entry", methods=["POST"])
 @login_required
 def api_set_entry():
@@ -390,7 +459,7 @@ def export_pdf(board_id):
     from reportlab.lib.enums import TA_CENTER
     from reportlab.pdfgen import canvas as pdfcanvas
 
-    people = board.people
+    people = [p for p in board.people if not p.user or p.user.role == "user"]
     dates = board.dates
     entries = {}
     for e in Entry.query.filter_by(board_id=board_id).all():
@@ -675,11 +744,35 @@ def init_db():
 for view_name in (
     "api_add_person", "api_rename_person", "api_delete_person",
     "api_add_date", "api_delete_date", "api_set_entry",
+    "api_upload_attachment", "api_delete_attachment",
 ):
     csrf.exempt(app.view_functions[view_name])
 
+def run_light_migrations():
+    """Ergänzt fehlende Spalten in bereits bestehenden Tabellen, ohne Daten anzufassen.
+    db.create_all() legt nur neue Tabellen an, ändert aber keine existierenden - das holt das hier nach."""
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(db.engine)
+    if "event_dates" not in inspector.get_table_names():
+        return
+    existing_cols = {c["name"] for c in inspector.get_columns("event_dates")}
+    new_columns = {
+        "attachment_filename": db.String(255),
+        "attachment_data": db.LargeBinary(),
+        "attachment_uploaded_at": db.DateTime(),
+        "attachment_uploaded_by": db.Integer(),
+    }
+    with db.engine.begin() as conn:
+        for col_name, col_type in new_columns.items():
+            if col_name not in existing_cols:
+                type_sql = col_type.compile(dialect=db.engine.dialect)
+                conn.execute(text(f"ALTER TABLE event_dates ADD COLUMN {col_name} {type_sql}"))
+
+
 with app.app_context():
     db.create_all()
+    run_light_migrations()
 
 
 if __name__ == "__main__":
