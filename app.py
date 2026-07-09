@@ -186,7 +186,14 @@ def logout():
 @app.route("/")
 @login_required
 def dashboard():
-    boards = Board.query.order_by(Board.created_at.desc()).all()
+    if current_user.is_staff:
+        boards = Board.query.order_by(Board.created_at.desc()).all()
+    else:
+        my_board_ids = [p.board_id for p in Person.query.filter_by(user_id=current_user.id).all()]
+        boards = (
+            Board.query.filter(Board.id.in_(my_board_ids)).order_by(Board.created_at.desc()).all()
+            if my_board_ids else []
+        )
     return render_template("dashboard.html", boards=boards)
 
 
@@ -196,6 +203,12 @@ def board_view(board_id):
     board = db.session.get(Board, board_id) or abort(404)
     people = board.people
     dates = board.dates
+
+    my_person = next((p for p in people if p.user_id == current_user.id), None)
+
+    # Normale Nutzer sehen ein Board nur, wenn sie dort eingetragen sind.
+    if not current_user.is_staff and my_person is None:
+        abort(403)
 
     entries = {}
     for e in Entry.query.filter_by(board_id=board_id).all():
@@ -213,10 +226,13 @@ def board_view(board_id):
             "date": d.date.isoformat(),
             "weekday": weekdays[d.date.weekday()],
             "display": d.date.strftime("%d.%m."),
+            "label": d.label or "",
             "stats": stats,
+            "my_status": entries.get(f"{my_person.id}:{d.id}", "unset") if my_person else "unset",
         })
 
-    recent_logs = ChangeLog.query.filter_by(board_id=board_id).order_by(ChangeLog.timestamp.desc()).limit(25).all() if current_user.is_staff else []
+    # Änderungsprotokoll: ausschließlich für echte Administratoren, nicht für Lehrer.
+    recent_logs = ChangeLog.query.filter_by(board_id=board_id).order_by(ChangeLog.timestamp.desc()).limit(50).all() if current_user.is_admin else []
 
     already_ids = {p.user_id for p in people if p.user_id}
     available_users = User.query.filter(~User.id.in_(already_ids)).order_by(User.display_name).all() if already_ids else User.query.order_by(User.display_name).all()
@@ -229,6 +245,7 @@ def board_view(board_id):
         entries=entries,
         recent_logs=recent_logs,
         available_users=available_users,
+        my_person=my_person,
     )
 
 
@@ -299,18 +316,21 @@ def api_delete_person(person_id):
 @staff_required
 def api_add_date(board_id):
     db.session.get(Board, board_id) or abort(404)
-    raw = (request.json or {}).get("date", "")
+    data = request.json or {}
+    raw = data.get("date", "")
+    label = (data.get("label") or "").strip()[:60]
     try:
         d = date_cls.fromisoformat(raw)
     except ValueError:
         return jsonify({"error": "Ungültiges Datum"}), 400
     if EventDate.query.filter_by(board_id=board_id, date=d).first():
         return jsonify({"error": "Termin existiert bereits"}), 400
-    event_date = EventDate(board_id=board_id, date=d)
+    event_date = EventDate(board_id=board_id, date=d, label=label or None)
     db.session.add(event_date)
-    log_action(board_id, "Termin hinzugefügt", d.isoformat())
+    detail = d.isoformat() + (f" – {label}" if label else "")
+    log_action(board_id, "Termin hinzugefügt", detail)
     db.session.commit()
-    return jsonify({"id": event_date.id, "date": d.isoformat()})
+    return jsonify({"id": event_date.id, "date": d.isoformat(), "label": label})
 
 
 @app.route("/api/date/<int:date_id>", methods=["DELETE"])
@@ -372,7 +392,9 @@ def export_pdf(board_id):
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib.units import mm
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Spacer
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Spacer, Paragraph
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER
     from reportlab.pdfgen import canvas as pdfcanvas
 
     people = board.people
@@ -458,7 +480,19 @@ def export_pdf(board_id):
         leftMargin=LM, rightMargin=LM, topMargin=34 * mm, bottomMargin=20 * mm,
     )
 
-    header_row = ["Name"] + [d.date.strftime("%d.%m.%Y") for d in dates]
+    header_style = ParagraphStyle(
+        name="DateHeader", fontName="Helvetica-Bold", fontSize=9.5,
+        alignment=TA_CENTER, textColor=INK, leading=12,
+    )
+
+    def date_header_cell(d):
+        date_str = d.date.strftime("%d.%m.%Y")
+        if d.label:
+            safe_label = (d.label or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            return Paragraph(f"{date_str}<br/><font size=7.5 color='#5B6270'>{safe_label}</font>", header_style)
+        return Paragraph(date_str, header_style)
+
+    header_row = ["Name"] + [date_header_cell(d) for d in dates]
     rows = [header_row]
     for p in people:
         row = [p.name]
@@ -615,9 +649,18 @@ def admin_delete_user(user_id):
     if user.id == current_user.id:
         flash("Du kannst dich nicht selbst löschen.", "error")
         return redirect(url_for("admin_home"))
+
+    # Verknüpfte Datensätze vorher auflösen, sonst blockiert die Datenbank das Löschen
+    # (Fremdschlüssel würden sonst ins Leere zeigen).
+    Person.query.filter_by(user_id=user.id).update({"user_id": None})
+    Entry.query.filter_by(updated_by=user.id).update({"updated_by": None})
+    ChangeLog.query.filter_by(user_id=user.id).update({"user_id": None})
+    Board.query.filter_by(created_by=user.id).update({"created_by": None})
+    Invite.query.filter_by(created_by=user.id).update({"created_by": None})
+
     db.session.delete(user)
     db.session.commit()
-    flash("Nutzer wurde gelöscht.", "success")
+    flash("Nutzer wurde gelöscht. Seine Zeilen in Boards bleiben als Gastzeilen erhalten.", "success")
     return redirect(url_for("admin_home"))
 
 
