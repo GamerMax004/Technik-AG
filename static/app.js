@@ -98,18 +98,54 @@
       } catch(err){ alert(err.message); }
       return;
     }
+
+    const removeAttachmentBtn = e.target.closest('[data-remove-attachment]');
+    if(removeAttachmentBtn){
+      if(!confirm('PDF-Anhang wirklich entfernen?')) return;
+      try{
+        await api('/api/date/' + removeAttachmentBtn.dataset.removeAttachment + '/attachment', { method: 'DELETE' });
+        location.reload();
+      } catch(err){ alert(err.message); }
+      return;
+    }
   });
 
   // Rename person
   panel.addEventListener('change', async (e) => {
-    const input = e.target.closest('[data-rename]');
-    if(!input) return;
-    try{
-      await api('/api/person/' + input.dataset.rename, {
-        method: 'PATCH',
-        body: JSON.stringify({ name: input.value })
-      });
-    } catch(err){ alert(err.message); }
+    const renameInput = e.target.closest('[data-rename]');
+    if(renameInput){
+      try{
+        await api('/api/person/' + renameInput.dataset.rename, {
+          method: 'PATCH',
+          body: JSON.stringify({ name: renameInput.value })
+        });
+      } catch(err){ alert(err.message); }
+      return;
+    }
+
+    // PDF-Anhang hochladen
+    const fileInput = e.target.closest('[data-upload-attachment]');
+    if(fileInput){
+      const file = fileInput.files[0];
+      if(!file) return;
+      if(!file.name.toLowerCase().endsWith('.pdf')){
+        alert('Nur PDF-Dateien sind erlaubt.');
+        fileInput.value = '';
+        return;
+      }
+      const formData = new FormData();
+      formData.append('file', file);
+      try{
+        const res = await fetch('/api/date/' + fileInput.dataset.uploadAttachment + '/attachment', {
+          method: 'POST', body: formData
+        });
+        if(!res.ok){
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || 'Upload fehlgeschlagen');
+        }
+        location.reload();
+      } catch(err){ alert(err.message); }
+    }
   });
 
   // Add date (mit optionaler Notiz)

@@ -99,62 +99,18 @@ header.top p{ margin:0; color: var(--ink-soft); font-size:14.5px; max-width:520p
 .toolbar select:focus{ outline:none; }
 .toolbar .field .btn{ padding:7px 12px; }
 .toolbar .field .btn:disabled{ opacity:.4; cursor:not-allowed; }
-.legend{ display:flex; align-items:center; gap:18px; padding:0 16px 16px; flex-wrap:wrap; color:var(--ink-soft); font-size:13px; }
-.legend .item{ display:flex; align-items:center; gap:7px; }
+
+.legend{ display:flex; align-items:center; gap:16px 20px; padding:14px 20px; flex-wrap:wrap; color:var(--ink-soft); font-size:13px; border-top:1px solid var(--line); }
+.legend .item{ display:flex; align-items:center; gap:7px; flex-shrink:0; }
 .legend .dot{ width:11px; height:11px; border-radius:3px; flex-shrink:0; }
 .legend .dot.ok{ background:var(--ok); } .legend .dot.warn{ background:var(--warn); } .legend .dot.no{ background:var(--no); }
 .legend .dot.unset{ background:var(--unset); border:1px solid var(--line-strong); }
-.legend .hint{ margin-left:auto; font-size:12.5px; }
+.legend .hint{ margin-left:auto; font-size:12.5px; flex-shrink:0; }
 
-/* Staff: Desktop-Tabelle vs. Mobil-Kartenansicht */
-.staff-mobile-view{ display:none; }
-.staff-mobile-section{ padding:16px; }
-.staff-mobile-section + .staff-mobile-section{ padding-top:0; }
-.staff-mobile-heading{ font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); margin:0 0 10px; }
-.staff-people-list{ display:flex; flex-direction:column; gap:8px; }
-.staff-person-edit{
-  display:flex; align-items:center; justify-content:space-between; gap:10px;
-  padding:10px 12px; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--surface-2);
-}
-.staff-person-edit.my-row{ box-shadow: inset 3px 0 0 var(--accent); }
-.staff-person-edit .name-wrap{ display:flex; align-items:center; gap:6px; min-width:0; flex:1; }
-.staff-person-edit .name-input{ border:none; background:transparent; font:inherit; font-weight:600; font-size:14px; color:var(--ink); width:100%; min-width:0; }
-.staff-person-edit .name-input:focus{ outline:none; }
-.staff-day-card{ display:flex; flex-direction:column; gap:10px; align-items:stretch; }
-.staff-mobile-view .day-card{ flex-direction:column; align-items:stretch; }
-.staff-day-card-header{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
-.staff-person-rows{ display:flex; flex-direction:column; gap:6px; padding-top:8px; border-top:1px solid var(--line); }
-.staff-person-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
-.staff-person-name{ font-size:13.5px; color:var(--ink); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.status-pill.compact{ padding:6px 10px; font-size:12px; gap:0; flex-shrink:0; }
-.status-pill.compact .status-pill-label{ display:none; }
-.status-pill.compact .status-pill-icon{ width:14px; height:14px; }
-.status-pill.compact .status-pill-icon svg{ width:14px; height:14px; }
-.status-pill.compact .status-pill-icon .pill-dot{ width:7px; height:7px; }
-
-/* Grid */
-.table-scroll{ overflow-x:auto; border-top:1px solid var(--line); }
-table.grid{ border-collapse:separate; border-spacing:0; width:100%; min-width:560px; }
-table.grid th, table.grid td{ border-bottom:1px solid var(--line); padding:0; }
-.corner{ position:sticky; left:0; top:0; z-index:3; background:var(--surface); min-width:230px; border-right:1px solid var(--line); }
-.col-head{ position:sticky; top:0; z-index:2; background:var(--surface); padding:12px 14px !important; text-align:center; min-width:130px; }
-.col-head .dhead{ display:flex; flex-direction:column; align-items:center; gap:2px; }
-.col-head .wd{ font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-soft); }
-.col-head .dd{ font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:500; }
-.col-head .del{ margin-top:4px; }
-.bar{ height:5px; display:flex; border-radius:3px; overflow:hidden; margin-top:8px; background:var(--unset); width:100%; }
-.bar span{ height:100%; display:block; }
-.row-head{ position:sticky; left:0; z-index:1; background:var(--surface); padding:10px 14px !important; border-right:1px solid var(--line); min-width:230px; }
-.row-head .rh{ display:flex; align-items:center; gap:8px; }
-.row-head .name-wrap{ display:flex; align-items:center; gap:6px; min-width:0; flex:1; }
-.row-head .name-input{ border:none; background:transparent; font:inherit; font-weight:600; font-size:14px; color:var(--ink); width:100%; min-width:0; flex:1; }
-.row-head .name-input:focus{ outline:none; border-bottom:1px solid var(--accent); }
-.row-head .person-delete{ flex-shrink:0; }
-tr:nth-child(even) .row-head, tr:nth-child(even) td.cell-td{ background: var(--surface-2); }
-td.cell-td{ text-align:center; background:var(--surface); }
-.cell{ width:100%; height:52px; border:none; background:transparent; cursor:pointer; display:flex; align-items:center; justify-content:center; transition: background .12s ease; }
-.cell:hover{ background: rgba(61,76,224,0.06); }
-.cell:focus-visible{ outline:2px solid var(--accent); outline-offset:-2px; }
+/* Kleines Status-"Checkbox"-Element, wiederverwendet in der Staff-Kartenansicht */
+.cell{ width:32px; height:32px; flex-shrink:0; border:none; background:transparent; border-radius:8px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition: background .12s ease; }
+.cell:hover{ background: rgba(61,76,224,0.08); }
+.cell:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
 .chip{ width:28px; height:28px; border-radius:8px; display:flex; align-items:center; justify-content:center; background:var(--unset); transition: background .12s ease, transform .1s ease; }
 .cell:active .chip{ transform: scale(0.92); }
 .chip.ok{ background: var(--ok-soft); color: var(--ok); }
@@ -176,8 +132,6 @@ td.cell-td{ text-align:center; background:var(--surface); }
 .board-card-meta{ display:flex; gap:12px; margin-top:6px; font-size:12px; color: var(--ink-soft); font-family:'JetBrains Mono',monospace; }
 
 /* Change log */
-.log-panel{ margin-top:18px; padding:18px; }
-.log-title{ font-size:15px; margin-bottom:12px; }
 .log-list{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px; max-height:280px; overflow-y:auto; }
 .log-list li{ display:flex; gap:10px; align-items:baseline; font-size:13px; padding-bottom:8px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
 .log-time{ color: var(--ink-soft); font-size:11.5px; flex-shrink:0; }
@@ -203,12 +157,9 @@ td.cell-td{ text-align:center; background:var(--surface); }
 
 @media (prefers-reduced-motion: reduce){ *{ transition:none !important; } }
 
-/* Rollen / Rechte */
+/* Rollen / Namen */
 .me-badge{ font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color: var(--accent); background: var(--accent-soft); padding:2px 6px; border-radius:5px; flex-shrink:0; }
-tr.my-row .row-head{ box-shadow: inset 3px 0 0 var(--accent); }
-.cell-readonly{ width:100%; height:52px; display:flex; align-items:center; justify-content:center; cursor:default; }
-.cell-readonly .chip{ opacity:.65; }
-.name-input[readonly]{ color: var(--ink-soft); cursor:default; }
+.name-wrap{ display:flex; align-items:center; gap:6px; min-width:0; flex:1; }
 
 /* Einladungen */
 .section-hint{ font-size:13px; color: var(--ink-soft); margin: 0 0 14px; line-height:1.5; }
@@ -218,10 +169,7 @@ tr.my-row .row-head{ box-shadow: inset 3px 0 0 var(--accent); }
 .status-badge.status-ok{ background: var(--ok-soft); color: var(--ok); }
 .status-badge.status-no{ background: var(--no-soft); color: var(--no); }
 
-/* Terminnotiz im Grid-Header */
-.date-note{ font-size:10.5px; color: var(--ink-soft); text-align:center; max-width:120px; overflow-wrap:break-word; white-space:normal; line-height:1.3; margin-top:1px; }
-
-/* Kartenansicht für normale Nutzer */
+/* Kartenansicht: Termine (normale Nutzer + Staff) */
 .day-list{ display:flex; flex-direction:column; gap:10px; padding:16px; }
 .day-card{
   display:flex; flex-direction:column; gap:12px;
@@ -231,6 +179,7 @@ tr.my-row .row-head{ box-shadow: inset 3px 0 0 var(--accent); }
 .day-card-weekday{ font-size:11px; text-transform:uppercase; letter-spacing:.08em; color: var(--ink-soft); }
 .day-card-date{ font-size:16px; font-weight:600; }
 .day-card-note{ font-size:13px; color: var(--ink-soft); margin-top:2px; }
+
 .status-pill{
   align-self:flex-start;
   appearance:none; border:1px solid var(--line-strong); background: var(--surface);
@@ -253,6 +202,45 @@ tr.my-row .row-head{ box-shadow: inset 3px 0 0 var(--accent); }
   .day-card{ flex-direction:row; align-items:center; justify-content:space-between; }
   .status-pill{ align-self:center; }
 }
+
+/* Staff: Personen- und Termine-Verwaltung als Karten (ersetzt die alte Tabelle) */
+.staff-view{ display:flex; flex-direction:column; }
+.staff-section{ padding:16px; border-top:1px solid var(--line); }
+.staff-section:first-child{ border-top:none; }
+.staff-heading{ font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); margin:0 0 10px; }
+.staff-empty-hint{ font-size:13px; color: var(--ink-soft); margin:0; }
+
+.staff-people-list{ display:flex; flex-direction:column; gap:8px; }
+.staff-person-edit{
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  padding:10px 12px; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--surface-2);
+}
+.staff-person-edit.my-row{ box-shadow: inset 3px 0 0 var(--accent); }
+.staff-person-edit .name-input{ border:none; background:transparent; font:inherit; font-weight:600; font-size:14px; color:var(--ink); width:100%; min-width:0; }
+.staff-person-edit .name-input:focus{ outline:none; }
+
+.staff-day-card{ display:flex !important; flex-direction:column !important; align-items:stretch !important; gap:10px; }
+.staff-day-card-header{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+.staff-person-rows{ display:flex; flex-direction:column; gap:2px; padding-top:8px; border-top:1px solid var(--line); }
+.staff-person-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:5px 0; }
+.staff-person-name{ font-size:13.5px; color:var(--ink); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* PDF-Anhänge pro Termin */
+.attachment-row{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.attachment-chip{
+  display:inline-flex; align-items:center; gap:7px; padding:6px 12px; border-radius:999px;
+  background: var(--accent-soft); color: var(--accent); font-size:12.5px; font-weight:600;
+  max-width:100%; overflow:hidden;
+}
+.attachment-chip span{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.attachment-chip svg{ width:14px; height:14px; flex-shrink:0; }
+.attachment-remove{ flex-shrink:0; }
+.attachment-upload-btn{
+  display:inline-flex; align-items:center; gap:7px; padding:7px 12px; border-radius:var(--radius-sm);
+  border:1px dashed var(--line-strong); color: var(--ink-soft); font-size:12.5px; font-weight:600; cursor:pointer;
+}
+.attachment-upload-btn:hover{ border-color: var(--accent); color: var(--accent); }
+.attachment-upload-btn svg{ width:14px; height:14px; }
 
 /* Änderungsprotokoll-Modal */
 .modal-backdrop{
@@ -289,17 +277,8 @@ tr.my-row .row-head{ box-shadow: inset 3px 0 0 var(--accent); }
   .invite-link-row{ flex-wrap:wrap; }
   .invite-link-field{ width:100%; }
 
-  .row-head .name-input{ width:100%; }
-  .row-head, .corner{ min-width:170px; }
-  .col-head{ min-width:96px; padding:10px 8px !important; }
-
-  .legend{ display:grid; grid-template-columns:1fr 1fr; gap:8px 14px; padding:0 16px 14px; }
+  .legend{ display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; padding:14px 16px; }
   .legend .hint{ grid-column:1 / -1; margin-left:0; margin-top:2px; }
-}
-
-@media (max-width:700px){
-  .staff-desktop-view{ display:none; }
-  .staff-mobile-view{ display:block; }
 }
 
 @media (max-width:400px){
