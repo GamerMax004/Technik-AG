@@ -190,6 +190,55 @@ tr.my-row .row-head{ box-shadow: inset 3px 0 0 var(--accent); }
 .status-badge.status-ok{ background: var(--ok-soft); color: var(--ok); }
 .status-badge.status-no{ background: var(--no-soft); color: var(--no); }
 
+/* Terminnotiz im Grid-Header */
+.date-note{ font-size:10.5px; color: var(--ink-soft); text-align:center; max-width:100px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:1px; }
+
+/* Kartenansicht für normale Nutzer */
+.day-list{ display:flex; flex-direction:column; gap:10px; padding:16px; }
+.day-card{
+  display:flex; flex-direction:column; gap:12px;
+  padding:16px; border:1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2);
+}
+.day-card-info{ display:flex; flex-direction:column; gap:2px; }
+.day-card-weekday{ font-size:11px; text-transform:uppercase; letter-spacing:.08em; color: var(--ink-soft); }
+.day-card-date{ font-size:16px; font-weight:600; }
+.day-card-note{ font-size:13px; color: var(--ink-soft); margin-top:2px; }
+.status-pill{
+  align-self:flex-start;
+  appearance:none; border:1px solid var(--line-strong); background: var(--surface);
+  display:inline-flex; align-items:center; gap:9px; padding:11px 18px; border-radius:999px;
+  font: inherit; font-size:14px; font-weight:600; color: var(--ink-soft); cursor:pointer;
+  transition: background .15s ease, border-color .15s ease, transform .05s ease;
+}
+.status-pill:hover{ filter: brightness(0.98); }
+.status-pill:active{ transform: scale(0.97); }
+.status-pill:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+.status-pill-icon{ width:16px; height:16px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.status-pill-icon svg{ width:16px; height:16px; }
+.status-pill-icon .pill-dot{ width:8px; height:8px; border-radius:50%; background: var(--unset); }
+.status-pill.ok{ background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+.status-pill.warn{ background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.status-pill.no{ background: var(--no-soft); color: var(--no); border-color: transparent; }
+.status-pill.unset{ background: var(--surface); color: var(--ink-soft); }
+
+@media (min-width:640px){
+  .day-card{ flex-direction:row; align-items:center; justify-content:space-between; }
+  .status-pill{ align-self:center; }
+}
+
+/* Änderungsprotokoll-Modal */
+.modal-backdrop{
+  position:fixed; inset:0; background: rgba(23,26,33,0.45);
+  display:flex; align-items:center; justify-content:center; padding:20px; z-index:50;
+}
+.modal-panel{
+  background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow);
+  width:100%; max-width:640px; max-height:80vh; display:flex; flex-direction:column; padding:22px;
+}
+.modal-header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; flex-shrink:0; }
+.modal-header h3{ font-size:16px; }
+.modal-panel .log-list{ overflow-y:auto; max-height:none; }
+
 @media (max-width:640px){
   header.top h1{ font-size:23px; }
   .toolbar{ flex-direction:column; align-items:stretch; }

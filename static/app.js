@@ -13,6 +13,7 @@
     no: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>',
     unset: ''
   };
+  const LABELS = { unset: 'Offen', ok: 'Verfügbar', warn: 'Mit Vorbehalt', no: 'Nicht verfügbar' };
 
   async function api(url, options){
     const res = await fetch(url, Object.assign({
@@ -25,6 +26,7 @@
     return res.json();
   }
 
+  // --- Kleine Grid-Zellen (Staff-Ansicht) ---
   function setChip(cellBtn, status){
     const chip = cellBtn.querySelector('.chip');
     chip.className = 'chip ' + status;
@@ -33,33 +35,47 @@
     cellBtn.setAttribute('aria-label', 'Status: ' + status);
   }
 
-  // Initial render of icons for server-rendered cells
   document.querySelectorAll('.cell[data-status]').forEach(cellBtn => {
     setChip(cellBtn, cellBtn.dataset.status || 'unset');
   });
 
-  // Cell click -> cycle status
+  // --- Große Status-Pills (Kartenansicht normaler Nutzer) ---
+  function setPill(pillBtn, status){
+    pillBtn.className = 'status-pill ' + status;
+    pillBtn.querySelector('.status-pill-icon').innerHTML = ICONS[status] || '<span class="pill-dot"></span>';
+    pillBtn.querySelector('.status-pill-label').textContent = LABELS[status];
+    pillBtn.dataset.status = status;
+  }
+
+  document.querySelectorAll('.status-pill[data-status]').forEach(pillBtn => {
+    setPill(pillBtn, pillBtn.dataset.status || 'unset');
+  });
+
+  async function cycleStatus(btn, isPill){
+    const current = btn.dataset.status || 'unset';
+    const next = STATES[(STATES.indexOf(current) + 1) % STATES.length];
+    if(isPill) setPill(btn, next); else setChip(btn, next); // optimistic UI
+    try{
+      await api(entryUrl, {
+        method: 'POST',
+        body: JSON.stringify({
+          person_id: Number(btn.dataset.person),
+          date_id: Number(btn.dataset.date),
+          status: next
+        })
+      });
+    } catch(err){
+      if(isPill) setPill(btn, current); else setChip(btn, current); // revert on failure
+      alert('Status konnte nicht gespeichert werden: ' + err.message);
+    }
+  }
+
   panel.addEventListener('click', async (e) => {
     const cellBtn = e.target.closest('.cell');
-    if(cellBtn){
-      const current = cellBtn.dataset.status || 'unset';
-      const next = STATES[(STATES.indexOf(current) + 1) % STATES.length];
-      setChip(cellBtn, next); // optimistic UI
-      try{
-        await api(entryUrl, {
-          method: 'POST',
-          body: JSON.stringify({
-            person_id: Number(cellBtn.dataset.person),
-            date_id: Number(cellBtn.dataset.date),
-            status: next
-          })
-        });
-      } catch(err){
-        setChip(cellBtn, current); // revert on failure
-        alert('Status konnte nicht gespeichert werden: ' + err.message);
-      }
-      return;
-    }
+    if(cellBtn){ await cycleStatus(cellBtn, false); return; }
+
+    const pillBtn = e.target.closest('.status-pill');
+    if(pillBtn){ await cycleStatus(pillBtn, true); return; }
 
     const removeDateBtn = e.target.closest('[data-remove-date]');
     if(removeDateBtn){
@@ -94,32 +110,37 @@
     } catch(err){ alert(err.message); }
   });
 
-  // Add person
+  // Add person (Gast)
   const personInput = document.getElementById('personInput');
   const addPersonBtn = document.getElementById('addPersonBtn');
-  async function submitPerson(){
-    const name = personInput.value.trim();
-    if(!name) return;
-    try{
-      await api(addPersonUrl, { method: 'POST', body: JSON.stringify({ name }) });
-      location.reload();
-    } catch(err){ alert(err.message); }
+  if(addPersonBtn){
+    async function submitPerson(){
+      const name = personInput.value.trim();
+      if(!name) return;
+      try{
+        await api(addPersonUrl, { method: 'POST', body: JSON.stringify({ name }) });
+        location.reload();
+      } catch(err){ alert(err.message); }
+    }
+    addPersonBtn.addEventListener('click', submitPerson);
+    personInput.addEventListener('keydown', e => { if(e.key === 'Enter') submitPerson(); });
   }
-  addPersonBtn.addEventListener('click', submitPerson);
-  personInput.addEventListener('keydown', e => { if(e.key === 'Enter') submitPerson(); });
 
-  // Add date
+  // Add date (mit optionaler Notiz)
   const dateInput = document.getElementById('dateInput');
+  const dateLabelInput = document.getElementById('dateLabelInput');
   const addDateBtn = document.getElementById('addDateBtn');
-  async function submitDate(){
-    const value = dateInput.value;
-    if(!value) return;
-    try{
-      await api(addDateUrl, { method: 'POST', body: JSON.stringify({ date: value }) });
-      location.reload();
-    } catch(err){ alert(err.message); }
+  if(addDateBtn){
+    async function submitDate(){
+      const value = dateInput.value;
+      if(!value) return;
+      try{
+        await api(addDateUrl, { method: 'POST', body: JSON.stringify({ date: value, label: dateLabelInput.value.trim() }) });
+        location.reload();
+      } catch(err){ alert(err.message); }
+    }
+    addDateBtn.addEventListener('click', submitDate);
   }
-  addDateBtn.addEventListener('click', submitDate);
 
   // Registrierten Nutzer per Dropdown hinzufügen
   const userSelect = document.getElementById('userSelect');
@@ -133,5 +154,16 @@
         location.reload();
       } catch(err){ alert(err.message); }
     });
+  }
+
+  // Änderungsprotokoll-Modal
+  const openLogBtn = document.getElementById('openLogBtn');
+  const closeLogBtn = document.getElementById('closeLogBtn');
+  const logModalBackdrop = document.getElementById('logModalBackdrop');
+  if(openLogBtn && logModalBackdrop){
+    openLogBtn.addEventListener('click', () => { logModalBackdrop.hidden = false; });
+    closeLogBtn.addEventListener('click', () => { logModalBackdrop.hidden = true; });
+    logModalBackdrop.addEventListener('click', (e) => { if(e.target === logModalBackdrop) logModalBackdrop.hidden = true; });
+    document.addEventListener('keydown', (e) => { if(e.key === 'Escape') logModalBackdrop.hidden = true; });
   }
 })();
