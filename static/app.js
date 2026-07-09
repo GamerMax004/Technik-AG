@@ -41,10 +41,12 @@
 
   // --- Große Status-Pills (Kartenansicht normaler Nutzer) ---
   function setPill(pillBtn, status){
-    pillBtn.className = 'status-pill ' + status;
+    pillBtn.className = pillBtn.className.includes('compact') ? 'status-pill compact ' + status : 'status-pill ' + status;
     pillBtn.querySelector('.status-pill-icon').innerHTML = ICONS[status] || '<span class="pill-dot"></span>';
-    pillBtn.querySelector('.status-pill-label').textContent = LABELS[status];
+    const labelEl = pillBtn.querySelector('.status-pill-label');
+    if(labelEl) labelEl.textContent = LABELS[status];
     pillBtn.dataset.status = status;
+    pillBtn.setAttribute('aria-label', 'Status: ' + LABELS[status]);
   }
 
   document.querySelectorAll('.status-pill[data-status]').forEach(pillBtn => {
@@ -109,22 +111,6 @@
       });
     } catch(err){ alert(err.message); }
   });
-
-  // Add person (Gast)
-  const personInput = document.getElementById('personInput');
-  const addPersonBtn = document.getElementById('addPersonBtn');
-  if(addPersonBtn){
-    async function submitPerson(){
-      const name = personInput.value.trim();
-      if(!name) return;
-      try{
-        await api(addPersonUrl, { method: 'POST', body: JSON.stringify({ name }) });
-        location.reload();
-      } catch(err){ alert(err.message); }
-    }
-    addPersonBtn.addEventListener('click', submitPerson);
-    personInput.addEventListener('keydown', e => { if(e.key === 'Enter') submitPerson(); });
-  }
 
   // Add date (mit optionaler Notiz)
   const dateInput = document.getElementById('dateInput');
