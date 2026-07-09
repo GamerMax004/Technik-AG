@@ -95,9 +95,11 @@
           <tr class="{{ 'my-row' if p.user_id == current_user.id }}">
             <td class="row-head">
               <div class="rh">
-                <input class="name-input" data-rename="{{ p.id }}" value="{{ p.name }}" maxlength="40">
-                {% if p.user_id == current_user.id %}<span class="me-badge">Du</span>{% endif %}
-                <button class="btn ghost" data-remove-person="{{ p.id }}" aria-label="Person entfernen" title="Person entfernen">
+                <div class="name-wrap">
+                  <input class="name-input" data-rename="{{ p.id }}" value="{{ p.name }}" maxlength="40">
+                  {% if p.user_id == current_user.id %}<span class="me-badge">Du</span>{% endif %}
+                </div>
+                <button class="btn ghost person-delete" data-remove-person="{{ p.id }}" aria-label="Person entfernen" title="Person entfernen">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
                 </button>
               </div>
