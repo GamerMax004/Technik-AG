@@ -27,7 +27,35 @@
      data-board-id="{{ board.id }}"
      data-add-person-url="{{ url_for('api_add_person', board_id=board.id) }}"
      data-add-date-url="{{ url_for('api_add_date', board_id=board.id) }}"
-     data-entry-url="{{ url_for('api_set_entry') }}">
+     data-entry-url="{{ url_for('api_set_entry') }}"
+     data-add-lehrer-url="{{ url_for('api_add_board_lehrer', board_id=board.id) }}">
+
+  {% if current_user.is_admin %}
+  <div class="toolbar">
+    <div class="field">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--ink-soft); flex-shrink:0;"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 1.5 3 3 6 3s6-1.5 6-3v-5"/></svg>
+      <select id="lehrerSelect">
+        <option value="" disabled {{ 'selected' if available_lehrer else '' }}>Lehrkraft freischalten…</option>
+        {% for u in available_lehrer %}
+        <option value="{{ u.id }}">{{ u.display_name }} ({{ u.username }})</option>
+        {% endfor %}
+      </select>
+      <button class="btn primary" id="addLehrerBtn" {{ 'disabled' if not available_lehrer }}>Freischalten</button>
+    </div>
+  </div>
+  {% if board_lehrer %}
+  <div class="lehrer-access-list">
+    {% for m in board_lehrer %}
+    <span class="lehrer-chip">
+      {{ m.user.display_name if m.user else "Unbekannt" }}
+      <button class="lehrer-chip-remove" data-remove-lehrer="{{ m.id }}" aria-label="Zugriff entziehen" title="Zugriff entziehen">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="11" height="11"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>
+      </button>
+    </span>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% endif %}
 
   {% if current_user.is_staff %}
   <div class="toolbar">
