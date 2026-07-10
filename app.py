@@ -204,7 +204,7 @@ def board_view(board_id):
     board = db.session.get(Board, board_id) or abort(404)
     all_people = board.people
     # Lehrer und Admin sind Verwalter, keine Teilnehmer: sie erscheinen nicht in der Personenliste.
-    people = [p for p in all_people if not p.user or p.user.role == "user"]
+    people = [p for p in all_people if not p.user or p.user.role != "lehrer"]
     dates = board.dates
 
     my_person = next((p for p in people if p.user_id == current_user.id), None)
@@ -240,9 +240,9 @@ def board_view(board_id):
 
     already_ids = {p.user_id for p in all_people if p.user_id}
     available_users = (
-        User.query.filter(User.role == "user", ~User.id.in_(already_ids)).order_by(User.display_name).all()
+        User.query.filter(User.role != "lehrer", ~User.id.in_(already_ids)).order_by(User.display_name).all()
         if already_ids else
-        User.query.filter(User.role == "user").order_by(User.display_name).all()
+        User.query.filter(User.role != "lehrer").order_by(User.display_name).all()
     )
 
     return render_template(
@@ -272,6 +272,8 @@ def api_add_person(board_id):
         return jsonify({"error": "Nutzer fehlt"}), 400
 
     user = db.session.get(User, user_id) or abort(404)
+    if user.role == "lehrer":
+        return jsonify({"error": "Lehrkräfte können nicht als Person hinzugefügt werden"}), 400
     if Person.query.filter_by(board_id=board_id, user_id=user.id).first():
         return jsonify({"error": "Dieser Nutzer ist bereits in diesem Board"}), 400
 
@@ -324,8 +326,10 @@ def api_add_date(board_id):
         d = date_cls.fromisoformat(raw)
     except ValueError:
         return jsonify({"error": "Ungültiges Datum"}), 400
-    if EventDate.query.filter_by(board_id=board_id, date=d).first():
-        return jsonify({"error": "Termin existiert bereits"}), 400
+    # Mehrere Termine am selben Tag sind erlaubt (z.B. zwei Proben am gleichen Tag).
+    # Nur exakte Duplikate (gleiches Datum + gleiche Notiz) werden abgefangen.
+    if EventDate.query.filter_by(board_id=board_id, date=d, label=(label or None)).first():
+        return jsonify({"error": "Dieser Termin mit gleicher Notiz existiert an diesem Tag bereits"}), 400
     event_date = EventDate(board_id=board_id, date=d, label=label or None)
     db.session.add(event_date)
     detail = d.isoformat() + (f" – {label}" if label else "")
@@ -459,7 +463,7 @@ def export_pdf(board_id):
     from reportlab.lib.enums import TA_CENTER
     from reportlab.pdfgen import canvas as pdfcanvas
 
-    people = [p for p in board.people if not p.user or p.user.role == "user"]
+    people = [p for p in board.people if not p.user or p.user.role != "lehrer"]
     dates = board.dates
     entries = {}
     for e in Entry.query.filter_by(board_id=board_id).all():
