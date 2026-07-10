@@ -108,6 +108,16 @@
       } catch(err){ alert(err.message); }
       return;
     }
+
+    const removeLehrerBtn = e.target.closest('[data-remove-lehrer]');
+    if(removeLehrerBtn){
+      if(!confirm('Zugriff für diese Lehrkraft wirklich entziehen?')) return;
+      try{
+        await api('/api/board/' + panel.dataset.boardId + '/lehrer/' + removeLehrerBtn.dataset.removeLehrer, { method: 'DELETE' });
+        location.reload();
+      } catch(err){ alert(err.message); }
+      return;
+    }
   });
 
   // Rename person
@@ -173,6 +183,20 @@
       if(!userId) return;
       try{
         await api(addPersonUrl, { method: 'POST', body: JSON.stringify({ user_id: Number(userId) }) });
+        location.reload();
+      } catch(err){ alert(err.message); }
+    });
+  }
+
+  // Lehrkraft für dieses Board freischalten (nur Admin)
+  const lehrerSelect = document.getElementById('lehrerSelect');
+  const addLehrerBtn = document.getElementById('addLehrerBtn');
+  if(addLehrerBtn){
+    addLehrerBtn.addEventListener('click', async () => {
+      const userId = lehrerSelect.value;
+      if(!userId) return;
+      try{
+        await api(panel.dataset.addLehrerUrl, { method: 'POST', body: JSON.stringify({ user_id: Number(userId) }) });
         location.reload();
       } catch(err){ alert(err.message); }
     });
