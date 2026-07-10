@@ -12,7 +12,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from sqlalchemy import func
 
-from models import db, User, Board, Person, EventDate, Entry, ChangeLog, Invite, STATUS_VALUES, ROLE_LABELS
+from models import db, User, Board, Person, EventDate, Entry, ChangeLog, Invite, BoardManager, STATUS_VALUES, ROLE_LABELS
 
 # ---------------------------------------------------------------------------
 # App / DB setup
@@ -75,6 +75,20 @@ def staff_required(fn):
 def can_edit_person(person):
     """Staff darf jede Zeile bearbeiten, normale Nutzer nur ihre eigene."""
     return current_user.is_staff or person.user_id == current_user.id
+
+
+def can_access_board(board_id, user):
+    """Admin sieht immer alles. Lehrer nur zugewiesene Boards. Normale Nutzer
+    nur Boards, in denen sie als Person eingetragen sind (wird separat geprüft)."""
+    if user.is_admin:
+        return True
+    if user.role == "lehrer":
+        return BoardManager.query.filter_by(board_id=board_id, user_id=user.id).first() is not None
+    return None  # normale Nutzer: Prüfung erfolgt über die Person-Zuordnung
+
+
+def lehrer_board_ids(user_id):
+    return [m.board_id for m in BoardManager.query.filter_by(user_id=user_id).all()]
 
 
 def log_action(board_id, action, detail=None):
@@ -187,8 +201,11 @@ def logout():
 @app.route("/")
 @login_required
 def dashboard():
-    if current_user.is_staff:
+    if current_user.is_admin:
         boards = Board.query.order_by(Board.created_at.desc()).all()
+    elif current_user.role == "lehrer":
+        ids = lehrer_board_ids(current_user.id)
+        boards = Board.query.filter(Board.id.in_(ids)).order_by(Board.created_at.desc()).all() if ids else []
     else:
         my_board_ids = [p.board_id for p in Person.query.filter_by(user_id=current_user.id).all()]
         boards = (
@@ -209,8 +226,11 @@ def board_view(board_id):
 
     my_person = next((p for p in people if p.user_id == current_user.id), None)
 
-    # Normale Nutzer sehen ein Board nur, wenn sie dort eingetragen sind.
-    if not current_user.is_staff and my_person is None:
+    # Zugriffskontrolle: Admin immer, Lehrer nur zugewiesene Boards, normale Nutzer nur eigene Person.
+    if current_user.role == "lehrer":
+        if not can_access_board(board_id, current_user):
+            abort(403)
+    elif not current_user.is_staff and my_person is None:
         abort(403)
 
     entries = {}
@@ -245,6 +265,15 @@ def board_view(board_id):
         User.query.filter(User.role != "lehrer").order_by(User.display_name).all()
     )
 
+    # Nur für Administratoren: Lehrkräfte für dieses Board freischalten/entziehen.
+    board_lehrer = []
+    available_lehrer = []
+    if current_user.is_admin:
+        board_lehrer = BoardManager.query.filter_by(board_id=board_id).order_by(BoardManager.added_at).all()
+        assigned_ids = {m.user_id for m in board_lehrer}
+        available_lehrer = User.query.filter(User.role == "lehrer", ~User.id.in_(assigned_ids)).order_by(User.display_name).all() if assigned_ids \
+            else User.query.filter(User.role == "lehrer").order_by(User.display_name).all()
+
     return render_template(
         "board.html",
         board=board,
@@ -254,6 +283,8 @@ def board_view(board_id):
         recent_logs=recent_logs,
         available_users=available_users,
         my_person=my_person,
+        board_lehrer=board_lehrer,
+        available_lehrer=available_lehrer,
     )
 
 
@@ -310,6 +341,41 @@ def api_delete_person(person_id):
     board_id = person.board_id
     log_action(board_id, "Person entfernt", person.name)
     db.session.delete(person)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/board/<int:board_id>/lehrer", methods=["POST"])
+@login_required
+@admin_required
+def api_add_board_lehrer(board_id):
+    db.session.get(Board, board_id) or abort(404)
+    user_id = (request.json or {}).get("user_id")
+    if not user_id:
+        return jsonify({"error": "Lehrkraft fehlt"}), 400
+    user = db.session.get(User, user_id) or abort(404)
+    if user.role != "lehrer":
+        return jsonify({"error": "Nur Lehrkräfte können hier freigeschaltet werden"}), 400
+    if BoardManager.query.filter_by(board_id=board_id, user_id=user.id).first():
+        return jsonify({"error": "Diese Lehrkraft hat bereits Zugriff"}), 400
+
+    manager = BoardManager(board_id=board_id, user_id=user.id)
+    db.session.add(manager)
+    log_action(board_id, "Lehrkraft freigeschaltet", user.display_name)
+    db.session.commit()
+    return jsonify({"id": manager.id, "name": user.display_name})
+
+
+@app.route("/api/board/<int:board_id>/lehrer/<int:manager_id>", methods=["DELETE"])
+@login_required
+@admin_required
+def api_remove_board_lehrer(board_id, manager_id):
+    manager = db.session.get(BoardManager, manager_id) or abort(404)
+    if manager.board_id != board_id:
+        abort(404)
+    name = manager.user.display_name if manager.user else "Unbekannt"
+    log_action(board_id, "Lehrkraft-Zugriff entzogen", name)
+    db.session.delete(manager)
     db.session.commit()
     return jsonify({"ok": True})
 
@@ -723,6 +789,7 @@ def admin_delete_user(user_id):
     ChangeLog.query.filter_by(user_id=user.id).update({"user_id": None})
     Board.query.filter_by(created_by=user.id).update({"created_by": None})
     Invite.query.filter_by(created_by=user.id).update({"created_by": None})
+    BoardManager.query.filter_by(user_id=user.id).delete()
 
     db.session.delete(user)
     db.session.commit()
@@ -749,6 +816,7 @@ for view_name in (
     "api_add_person", "api_rename_person", "api_delete_person",
     "api_add_date", "api_delete_date", "api_set_entry",
     "api_upload_attachment", "api_delete_attachment",
+    "api_add_board_lehrer", "api_remove_board_lehrer",
 ):
     csrf.exempt(app.view_functions[view_name])
 

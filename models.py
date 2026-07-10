@@ -47,8 +47,24 @@ class Board(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     people = db.relationship("Person", backref="board", cascade="all, delete-orphan", order_by="Person.sort_order")
-    dates = db.relationship("EventDate", backref="board", cascade="all, delete-orphan", order_by="EventDate.date")
+    dates = db.relationship("EventDate", backref="board", cascade="all, delete-orphan", order_by="EventDate.date, EventDate.id")
     logs = db.relationship("ChangeLog", backref="board", cascade="all, delete-orphan", order_by="ChangeLog.timestamp.desc()")
+    managers = db.relationship("BoardManager", backref="board", cascade="all, delete-orphan")
+
+
+class BoardManager(db.Model):
+    """Gewährt einer Lehrkraft Zugriff auf ein bestimmtes Board, ohne dass sie
+    als Person (Teilnehmer:in) sichtbar oder auswählbar wird."""
+    __tablename__ = "board_managers"
+
+    id = db.Column(db.Integer, primary_key=True)
+    board_id = db.Column(db.Integer, db.ForeignKey("boards.id"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    added_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship("User")
+
+    __table_args__ = (db.UniqueConstraint("board_id", "user_id", name="uix_board_manager"),)
 
 
 class Person(db.Model):
