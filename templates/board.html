@@ -30,8 +30,9 @@
      data-entry-url="{{ url_for('api_set_entry') }}"
      data-add-lehrer-url="{{ url_for('api_add_board_lehrer', board_id=board.id) }}">
 
-  {% if current_user.is_admin %}
+  {% if current_user.is_staff %}
   <div class="toolbar">
+    {% if current_user.is_admin %}
     <div class="field">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--ink-soft); flex-shrink:0;"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 1.5 3 3 6 3s6-1.5 6-3v-5"/></svg>
       <select id="lehrerSelect">
@@ -42,23 +43,7 @@
       </select>
       <button class="btn primary" id="addLehrerBtn" {{ 'disabled' if not available_lehrer }}>Freischalten</button>
     </div>
-  </div>
-  {% if board_lehrer %}
-  <div class="lehrer-access-list">
-    {% for m in board_lehrer %}
-    <span class="lehrer-chip">
-      {{ m.user.display_name if m.user else "Unbekannt" }}
-      <button class="lehrer-chip-remove" data-remove-lehrer="{{ m.id }}" aria-label="Zugriff entziehen" title="Zugriff entziehen">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="11" height="11"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>
-      </button>
-    </span>
-    {% endfor %}
-  </div>
-  {% endif %}
-  {% endif %}
-
-  {% if current_user.is_staff %}
-  <div class="toolbar">
+    {% endif %}
     <div class="field">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--ink-soft); flex-shrink:0;"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
       <select id="userSelect">
@@ -72,6 +57,7 @@
     <div class="field">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--ink-soft); flex-shrink:0;"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></svg>
       <input type="date" id="dateInput">
+      <span class="date-format-hint">TT.MM.JJJJ</span>
       <input type="text" id="dateLabelInput" placeholder="Titel/Notiz (optional)" maxlength="60">
       <button class="btn primary" id="addDateBtn">Termin</button>
     </div>
@@ -88,6 +74,28 @@
 
   {% if current_user.is_staff %}
     <div class="staff-view">
+
+      {% if current_user.is_admin %}
+      <div class="staff-section">
+        <h4 class="staff-heading">Lehrkräfte</h4>
+        {% if board_lehrer %}
+        <div class="staff-people-list">
+          {% for m in board_lehrer %}
+          <div class="staff-person-edit">
+            <div class="name-wrap">
+              <span class="lehrer-name">{{ m.user.display_name if m.user else "Unbekannt" }}</span>
+            </div>
+            <button class="btn ghost person-delete" data-remove-lehrer="{{ m.id }}" aria-label="Zugriff entziehen" title="Zugriff entziehen">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+            </button>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="staff-empty-hint">Noch keine Lehrkraft freigeschaltet — oben über das Auswahlmenü.</p>
+        {% endif %}
+      </div>
+      {% endif %}
 
       <div class="staff-section">
         <h4 class="staff-heading">Personen</h4>
