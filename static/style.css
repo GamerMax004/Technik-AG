@@ -178,6 +178,10 @@ header.top p{ margin:0; color: var(--ink-soft); font-size:14.5px; max-width:520p
 .invite-link-row{ display:flex; gap:6px; align-items:center; }
 .invite-link-field{ font-size:12px; padding:6px 8px; border:1px solid var(--line); border-radius:6px; background: var(--surface-2); color: var(--ink-soft); width:220px; }
 .status-badge{ font-size:11.5px; font-weight:600; padding:3px 8px; border-radius:6px; }
+.badge-count{
+  display:inline-flex; align-items:center; justify-content:center; min-width:20px; height:20px; padding:0 6px;
+  background: var(--no); color:#fff; font-size:11.5px; font-weight:700; border-radius:999px; vertical-align:middle;
+}
 .status-badge.status-ok{ background: var(--ok-soft); color: var(--ok); }
 .status-badge.status-no{ background: var(--no-soft); color: var(--no); }
 
