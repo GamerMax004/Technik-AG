@@ -12,7 +12,8 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from sqlalchemy import func
 
-from models import db, User, Board, Person, EventDate, Entry, ChangeLog, Invite, BoardManager, STATUS_VALUES, ROLE_LABELS
+from models import db, User, Board, Person, EventDate, Entry, ChangeLog, Invite, BoardManager, AccessRequest, STATUS_VALUES, ROLE_LABELS
+from moderation import contains_banned_word
 
 # ---------------------------------------------------------------------------
 # App / DB setup
@@ -138,6 +139,8 @@ def register():
             error = "Passwörter stimmen nicht überein."
         elif User.query.filter(func.lower(User.username) == username.lower()).first():
             error = "Dieser Benutzername ist bereits vergeben."
+        elif contains_banned_word(username, include_reserved=True) or contains_banned_word(display_name):
+            error = "Dieser Name ist nicht erlaubt. Bitte wähle einen anderen Benutzer- oder Anzeigenamen."
 
         if error:
             flash(error, "error")
@@ -164,6 +167,22 @@ def register():
         return redirect(url_for("dashboard"))
 
     return render_template("register.html", invite=invite_code)
+
+
+@app.route("/register/request-access", methods=["POST"])
+@limiter.limit("5 per hour")
+def request_access():
+    email = request.form.get("email", "").strip()
+    invite_code = request.values.get("invite", "").strip()
+
+    if not email or "@" not in email or "." not in email.split("@")[-1] or len(email) > 255:
+        flash("Bitte eine gültige E-Mail-Adresse angeben.", "error")
+        return redirect(url_for("register", invite=invite_code))
+
+    db.session.add(AccessRequest(email=email[:255]))
+    db.session.commit()
+    flash("Anfrage gesendet. Du wirst kontaktiert, sobald ein Zugang für dich freigeschaltet wurde.", "success")
+    return redirect(url_for("register", invite=invite_code))
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -681,7 +700,19 @@ def admin_home():
     users = User.query.order_by(User.created_at).all()
     boards = Board.query.order_by(Board.created_at.desc()).all()
     invites = Invite.query.order_by(Invite.created_at.desc()).all()
-    return render_template("admin.html", users=users, boards=boards, invites=invites)
+    access_requests = AccessRequest.query.order_by(AccessRequest.requested_at.desc()).all()
+    return render_template("admin.html", users=users, boards=boards, invites=invites, access_requests=access_requests)
+
+
+@app.route("/admin/access-request/<int:req_id>/resolve", methods=["POST"])
+@login_required
+@admin_required
+def admin_resolve_access_request(req_id):
+    req = db.session.get(AccessRequest, req_id) or abort(404)
+    db.session.delete(req)
+    db.session.commit()
+    flash("Anfrage als erledigt markiert.", "success")
+    return redirect(url_for("admin_home"))
 
 
 @app.route("/admin/invite", methods=["POST"])
@@ -782,9 +813,11 @@ def admin_delete_user(user_id):
         flash("Du kannst dich nicht selbst löschen.", "error")
         return redirect(url_for("admin_home"))
 
-    # Verknüpfte Datensätze vorher auflösen, sonst blockiert die Datenbank das Löschen
-    # (Fremdschlüssel würden sonst ins Leere zeigen).
-    Person.query.filter_by(user_id=user.id).update({"user_id": None})
+    # Alle Spuren des Nutzers entfernen - inklusive seiner Zeilen in Boards (nicht als Gast belassen).
+    # Einzeln über die ORM löschen (nicht als Bulk-Query), damit die Kaskade zu den
+    # zugehörigen Verfügbarkeits-Einträgen greift und keine verwaisten Datensätze zurückbleiben.
+    for person in Person.query.filter_by(user_id=user.id).all():
+        db.session.delete(person)
     Entry.query.filter_by(updated_by=user.id).update({"updated_by": None})
     ChangeLog.query.filter_by(user_id=user.id).update({"user_id": None})
     Board.query.filter_by(created_by=user.id).update({"created_by": None})
@@ -793,7 +826,7 @@ def admin_delete_user(user_id):
 
     db.session.delete(user)
     db.session.commit()
-    flash("Nutzer wurde gelöscht. Seine Zeilen in Boards bleiben als Gastzeilen erhalten.", "success")
+    flash("Nutzer und alle seine Board-Einträge wurden vollständig gelöscht.", "success")
     return redirect(url_for("admin_home"))
 
 

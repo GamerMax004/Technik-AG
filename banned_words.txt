@@ -1,0 +1,68 @@
+# Blacklist für Benutzernamen und Anzeigenamen.
+# Ein Begriff pro Zeile, Groß-/Kleinschreibung spielt keine Rolle.
+# Zeilen, die mit # beginnen, sind Kommentare und werden ignoriert.
+# Die Prüfung sucht auch nach diesen Begriffen als Teil eines längeren Wortes
+# (z.B. "administrator123" würde bei "admin" ebenfalls blockiert).
+#
+# Das hier ist nur eine Startliste mit den gängigsten Fällen (Beleidigungen,
+# reservierte Systembegriffe, offensichtliche Hasssymbole). Sie ist bewusst
+# nicht vollständig - ergänze weitere Begriffe einfach zeilenweise, ein Wort
+# pro Zeile, dann committen und pushen. Kein Neustart der App nötig, die
+# Datei wird bei jedem Registrierungsversuch neu eingelesen.
+#
+# Die Zeile "## SECTION: reserved" markiert einen Bereich mit Begriffen, die
+# NUR für den Login-Benutzernamen gelten (nicht für den frei wählbaren
+# Anzeigenamen) - sonst könnte sich z.B. ein Admin nicht "Admin" in seinen
+# Anzeigenamen schreiben.
+
+## SECTION: reserved
+admin
+administrator
+moderator
+system
+support
+root
+
+## SECTION: general
+
+# Gängige Beleidigungen (DE/EN)
+idiot
+trottel
+vollidiot
+arschloch
+wichser
+hurensohn
+schlampe
+fotze
+missgeburt
+spast
+mongo
+retard
+bitch
+asshole
+fuck
+fucker
+motherfucker
+nigger
+nigga
+faggot
+schwuchtel
+kanake
+untermensch
+
+# Sexuelle Begriffe
+porn
+pornhub
+sex
+ficken
+fick
+nackt
+
+# Extremismus / historische Symbole
+hitler
+nazi
+adolf
+nsdap
+88
+1488
+heilhitler

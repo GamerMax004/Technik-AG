@@ -138,6 +138,15 @@ class Invite(db.Model):
         return True
 
 
+class AccessRequest(db.Model):
+    """E-Mail-Adressen von Personen, die ohne Einladungslink Zugang angefragt haben."""
+    __tablename__ = "access_requests"
+
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(255), nullable=False)
+    requested_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
 class ChangeLog(db.Model):
     __tablename__ = "change_logs"
 
