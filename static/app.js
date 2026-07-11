@@ -162,13 +162,22 @@
   const dateInput = document.getElementById('dateInput');
   const dateLabelInput = document.getElementById('dateLabelInput');
   const addDateBtn = document.getElementById('addDateBtn');
-  const dateFormatHint = document.getElementById('dateFormatHint');
+  const dateDisplay = document.getElementById('dateDisplay');
 
-  if(dateInput && dateFormatHint){
-    const toggleHint = () => { dateFormatHint.style.display = dateInput.value ? 'none' : ''; };
-    toggleHint();
-    dateInput.addEventListener('input', toggleHint);
-    dateInput.addEventListener('change', toggleHint);
+  if(dateInput && dateDisplay){
+    const updateDateDisplay = () => {
+      if(dateInput.value){
+        const [y, m, d] = dateInput.value.split('-');
+        dateDisplay.textContent = `${d}.${m}.${y}`;
+        dateDisplay.classList.remove('placeholder');
+      } else {
+        dateDisplay.textContent = 'TT.MM.JJJJ';
+        dateDisplay.classList.add('placeholder');
+      }
+    };
+    updateDateDisplay();
+    dateInput.addEventListener('input', updateDateDisplay);
+    dateInput.addEventListener('change', updateDateDisplay);
   }
 
   if(addDateBtn){

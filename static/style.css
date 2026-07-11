@@ -94,8 +94,15 @@ header.top p{ margin:0; color: var(--ink-soft); font-size:14.5px; max-width:520p
 .toolbar{ display:flex; gap:12px; padding:16px; flex-wrap:wrap; }
 .toolbar .field{ display:flex; align-items:center; gap:8px; background:var(--surface-2); border:1px solid var(--line); border-radius:var(--radius-sm); padding:4px 6px 4px 12px; }
 .toolbar input{ border:none; background:transparent; font:inherit; font-size:14px; color:var(--ink); padding:7px 4px; min-width:160px; }
-.date-format-hint{ font-size:10.5px; color: var(--ink-soft); font-family:'JetBrains Mono', monospace; white-space:nowrap; flex-shrink:0; margin-left:-6px; }
-#dateInput{ min-width:130px; }
+.date-field-wrap{ position:relative; display:inline-flex; align-items:center; min-width:88px; height:36px; flex-shrink:0; }
+.date-native-input{
+  position:absolute; inset:0; width:100%; height:100%; margin:0; padding:0; border:0;
+  opacity:0; cursor:pointer; -webkit-appearance:none; appearance:none;
+}
+.date-display{
+  font-family:'JetBrains Mono', monospace; font-size:14px; color: var(--ink); white-space:nowrap; pointer-events:none;
+}
+.date-display.placeholder{ color: var(--ink-soft); }
 .toolbar input:focus{ outline:none; }
 .toolbar select{ border:none; background:transparent; font:inherit; font-size:14px; color:var(--ink); padding:7px 4px; max-width:220px; }
 .toolbar select:focus{ outline:none; }
