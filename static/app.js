@@ -162,6 +162,15 @@
   const dateInput = document.getElementById('dateInput');
   const dateLabelInput = document.getElementById('dateLabelInput');
   const addDateBtn = document.getElementById('addDateBtn');
+  const dateFormatHint = document.getElementById('dateFormatHint');
+
+  if(dateInput && dateFormatHint){
+    const toggleHint = () => { dateFormatHint.style.display = dateInput.value ? 'none' : ''; };
+    toggleHint();
+    dateInput.addEventListener('input', toggleHint);
+    dateInput.addEventListener('change', toggleHint);
+  }
+
   if(addDateBtn){
     async function submitDate(){
       const value = dateInput.value;
