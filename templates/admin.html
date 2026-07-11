@@ -10,6 +10,37 @@
 </header>
 
 <section class="admin-section">
+  <h2>Zugangsanfragen{% if access_requests %} <span class="badge-count">{{ access_requests|length }}</span>{% endif %}</h2>
+  <div class="panel admin-panel">
+    <p class="section-hint">Personen, die sich ohne Einladungslink registrieren wollten und ihre E-Mail-Adresse hinterlassen haben. Schick ihnen per Mail einen Einladungslink von unten.</p>
+    {% if access_requests %}
+    <div class="table-scroll admin-scroll">
+      <table class="admin-table">
+        <thead><tr><th>E-Mail</th><th>Angefragt</th><th></th></tr></thead>
+        <tbody>
+          {% for req in access_requests %}
+          <tr>
+            <td class="mono">{{ req.email }}</td>
+            <td class="muted">{{ req.requested_at.strftime('%d.%m.%Y %H:%M') }}</td>
+            <td class="admin-row-actions">
+              <a class="btn ghost" href="mailto:{{ req.email }}?subject={{ 'Zugang zum Verfügbarkeitsplaner'|urlencode }}&body={{ 'Hallo,\n\nhier ist dein Zugangslink: [LINK HIER EINFÜGEN]\n\nViele Grüße'|urlencode }}">Mail öffnen</a>
+              <form method="post" action="{{ url_for('admin_resolve_access_request', req_id=req.id) }}" style="display:inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn ghost" type="submit">Erledigt</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="muted">Keine offenen Anfragen.</p>
+    {% endif %}
+  </div>
+</section>
+
+<section class="admin-section">
   <h2>Einladungen</h2>
   <div class="panel admin-panel">
     <p class="section-hint">Registrierung ist nur mit einem gültigen Einladungslink möglich. Lege hier neue Links an.</p>

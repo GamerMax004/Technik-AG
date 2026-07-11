@@ -6,7 +6,18 @@
     {% if invite_missing %}
       <p class="eyebrow">Einladung erforderlich</p>
       <h1>Kein Zugang ohne Link</h1>
-      <p class="auth-sub">Die Registrierung ist nur über einen gültigen Einladungslink möglich. Bitte frage eine Administratorin oder einen Administrator nach einem Link, oder prüfe, ob dein Link noch gültig ist.</p>
+      <p class="auth-sub">Die Registrierung ist nur über einen gültigen Einladungslink möglich. Du kannst hier trotzdem Zugang anfragen — trag deine E-Mail-Adresse ein, ein Administrator meldet sich dann bei dir.</p>
+
+      <form method="post" action="{{ url_for('request_access') }}" class="auth-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="invite" value="{{ invite or '' }}">
+        <label>
+          <span>E-Mail-Adresse</span>
+          <input type="email" name="email" placeholder="du@beispiel.de" required maxlength="255" autofocus>
+        </label>
+        <button class="btn primary" type="submit">Zugang anfragen</button>
+      </form>
+
       <p class="auth-switch">Schon registriert? <a href="{{ url_for('login') }}">Zum Login</a></p>
     {% else %}
       <p class="eyebrow">Neu hier</p>
