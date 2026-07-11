@@ -56,8 +56,10 @@
     </div>
     <div class="field">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--ink-soft); flex-shrink:0;"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></svg>
-      <input type="date" id="dateInput">
-      <span class="date-format-hint" id="dateFormatHint">TT.MM.JJJJ</span>
+      <div class="date-field-wrap">
+        <input type="date" id="dateInput" class="date-native-input">
+        <span class="date-display placeholder" id="dateDisplay">TT.MM.JJJJ</span>
+      </div>
       <input type="text" id="dateLabelInput" placeholder="Titel/Notiz (optional)" maxlength="60">
       <button class="btn primary" id="addDateBtn">Termin</button>
     </div>
